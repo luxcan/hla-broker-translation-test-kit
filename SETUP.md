@@ -43,6 +43,32 @@ See [docs/FOM-HANDOVER.md](docs/FOM-HANDOVER.md) for what each one has to contai
 `lib/vrlink/vrLinkSharp.dll` — copy from `C:\MAK\vrlink5.9\lib\`. Only the legacy C# agent
 references it; the native agents talk to the RTI directly.
 
+### RID files
+
+`config/rid.mtl` is **not** in the repo either. Start from your RTI's shipped rid
+(`C:\MAK\makRti<ver>\rid.mtl`) and set:
+
+```lisp
+(setqb RTI_extend13and1516interop 1)   ;; one RTI serves HLA 1.3 AND 1516 at once
+(setqb RTI_useRtiExec 0)               ;; peer-to-peer, no rtiexec process
+```
+
+Bridging two RTIs needs one rid per side on **distinct** `RTI_udpPort` / `RTI_tcpPort` /
+`RTI_destAddrString` — MAK's stock rids already differ per version, so start from those rather
+than one shared file. [docs/mak-rti-knowledge.md](docs/mak-rti-knowledge.md) §4 lists every
+parameter and what changed between versions.
+
+### Test data
+
+`tests/*.csv`, `tests/templates/` and `tests/native/*.txt` are excluded too. A generated CSV
+template carries the FOM's attribute names, datatypes and **byte offsets**, and an agent script
+names the customised attributes — that is FOM structure in another format, so it is excluded on
+the same grounds as the FOMs.
+
+Regenerate the templates from your own FOMs: register them in the GUI, then
+**CSV template → Download template…**. `tests/native/run-smoke.bat` is in the repo but needs its
+`.txt` scripts recreated for your FOM before it will run.
+
 ## Build
 
 ```bat

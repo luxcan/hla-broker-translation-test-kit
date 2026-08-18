@@ -1,9 +1,0 @@
-JOIN exec=BTK-IntTestB fed=BTK-CustomRPR2.xml federate=IntPubB type=Harness create=1
-INTCLASS name=HLAinteractionRoot.WeaponFire as=WeaponFire params=FiringObjectIdentifier,FireMissionIndex,FuseType mode=pub
-WAIT ms=1500
-SETPARAM class=WeaponFire name=FireMissionIndex hex=0000002a
-SETPARAM class=WeaponFire name=FiringObjectIdentifier str=SHOOTER-01
-SETPARAM class=WeaponFire name=FuseType i16=1000
-SENDINT class=WeaponFire
-WAIT ms=3000
-QUIT

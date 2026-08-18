@@ -1,8 +1,0 @@
-JOIN exec=BTK-IntTest fed=BTK-CustomRPR1.fed federate=IntPub create=1
-INTCLASS name=WeaponFire params=FiringObjectIdentifier,MunitionType,FireMissionIndex mode=pub
-WAIT ms=1500
-SETPARAM class=WeaponFire name=FireMissionIndex hex=0000002a
-SETPARAM class=WeaponFire name=FiringObjectIdentifier str=SHOOTER-01
-SENDINT class=WeaponFire
-WAIT ms=3000
-QUIT

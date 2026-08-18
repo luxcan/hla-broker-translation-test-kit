@@ -1,6 +1,0 @@
-# Subscriber: joins, subscribes BY NAME (nothing FOM-specific compiled in), reports raw bytes.
-JOIN exec=BTK-NativeTest fed=BTK-CustomRPR1.fed federate=NativeSub create=1
-CLASS name=BaseEntity attrs=EntityIdentifier,WorldLocation,BtkCustomValue,BtkCustomTag mode=sub
-WAIT ms=9000
-SNAPSHOT
-QUIT

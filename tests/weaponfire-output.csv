@@ -1,8 +1,0 @@
-# class: WeaponFire
-# kind: interaction
-#
-# What Federation B must receive for each interaction sent.
-entityId,FiringObjectIdentifier:string,FireMissionIndex,FuseType,WarheadType
-fire-1,SHOOTER-01,42,1000,2000
-fire-2,SHOOTER-02,43,1010,2010
-fire-3,SHOOTER-03,44,1020,2020

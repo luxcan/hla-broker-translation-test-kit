@@ -30,9 +30,6 @@ config/BTK-CustomRPR1.fed
 config/BTK-CustomRPR1.omt
 config/BTK-CustomRPR2.xml
 
-# NOT ignored - authored from scratch, safe to commit:
-!config/BTK-CustomRPR2-module.xml
-!config/rid.mtl
 
 # Local Claude Code settings - machine specific
 .claude/settings.local.json
@@ -45,3 +42,30 @@ config/BTK-CustomRPR2.xml
 *.db-shm
 assets/
 rti/
+
+# ---------------------------------------------------------------------------
+# EVERYTHING FOM- OR RTI-DERIVED IS EXCLUDED.
+#
+# Not only the FOM files themselves. A generated CSV template carries the FOM's
+# attribute names, datatypes and BYTE OFFSETS; an agent script names the
+# customised attributes and the .fed it joins with. That is the FOM's structure
+# in another format, so it is excluded on the same grounds.
+#
+# The repo therefore holds CODE and DOCS. Data comes from your own install -
+# see SETUP.md.
+# ---------------------------------------------------------------------------
+
+# RID files - RTI configuration, derived from MAK's shipped rids
+config/*.mtl
+
+# Every FOM, including project-authored modules
+config/*.fed
+config/*.omt
+config/*.xml
+
+# Test data and generated templates - carry FOM attribute names and offsets
+tests/*.csv
+tests/templates/
+
+# Native agent scripts - name the customised attributes and their byte values
+tests/native/*.txt
