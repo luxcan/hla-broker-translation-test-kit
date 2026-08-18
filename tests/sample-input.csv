@@ -1,0 +1,10 @@
+# Stimulus pumped into Federation A.  Rows sharing a step are ONE stimulus.
+step,action,objClass,entityId,attribute,value,datatype
+1,publish,BaseEntity,1:1:101,worldPosition.x,-2696048.0,float64
+1,publish,BaseEntity,1:1:101,worldPosition.y,-4429591.0,float64
+1,publish,BaseEntity,1:1:101,worldPosition.z,3701299.0,float64
+1,publish,BaseEntity,1:1:101,marking,TANK-01,string
+2,update,BaseEntity,1:1:102,worldPosition.x,-2696000.0,float64
+2,update,BaseEntity,1:1:102,worldPosition.y,-4429500.0,float64
+2,update,BaseEntity,1:1:102,worldPosition.z,3701200.0,float64
+2,update,BaseEntity,1:1:102,marking,HELO-02,string

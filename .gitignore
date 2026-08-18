@@ -1,0 +1,47 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+
+# Test/run artifacts
+*.log
+results/
+
+# Native agent build output (built by src/BrokerTestKit.AgentNative/build-native.bat)
+build/native/
+
+# ---------------------------------------------------------------------------
+# MAK licensed / vendor files - EXCLUDED by decision. Anyone cloning this repo
+# supplies them from their own MAK install; see SETUP.md.
+#
+# These are redistributable only under MAK's licence, and the derived customised
+# FOMs below are modified copies of MAK-shipped files, so they inherit that status.
+# ---------------------------------------------------------------------------
+lib/vrlink/vrLinkSharp.dll
+
+config/MAK-RPR1-1-1.fed
+config/HLAstandardMIM.xml
+config/RPR_FOM_v2.0_1516-2010.xml
+
+# Derived from MAK-shipped FOMs (see docs/FOM-HANDOVER.md)
+config/BTK-CustomRPR1.fed
+config/BTK-CustomRPR1.omt
+config/BTK-CustomRPR2.xml
+
+# NOT ignored - authored from scratch, safe to commit:
+!config/BTK-CustomRPR2-module.xml
+!config/rid.mtl
+
+# Local Claude Code settings - machine specific
+.claude/settings.local.json
+
+# GUI workspace: the app keeps its database and imported FOMs beside the exe.
+# Those are under bin/ and already ignored, but be explicit - they contain
+# copies of the licensed FOMs above.
+*.db
+*.db-wal
+*.db-shm
+assets/
+rti/

@@ -1,0 +1,4 @@
+JOIN exec=BTK-IntTestB fed=BTK-CustomRPR2.xml federate=IntSubB type=Harness create=1
+INTCLASS name=HLAinteractionRoot.WeaponFire as=WeaponFire params=FiringObjectIdentifier,FireMissionIndex,FuseType mode=sub
+WAIT ms=8000
+QUIT

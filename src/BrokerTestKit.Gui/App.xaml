@@ -1,0 +1,15 @@
+<Application x:Class="BrokerTestKit.Gui.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Dark only, by choice. Controls.xaml is written against the token KEYS, so a
+                     light dictionary could be dropped in later without touching a single style. -->
+                <ResourceDictionary Source="/BrokerTestKit.Gui;component/Themes/Precision.Dark.xaml" />
+                <ResourceDictionary Source="/BrokerTestKit.Gui;component/Themes/Controls.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

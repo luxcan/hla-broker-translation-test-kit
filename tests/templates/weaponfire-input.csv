@@ -1,0 +1,21 @@
+# class: WeaponFire
+# kind: interaction
+#
+# Generated from FDD (1516-2010) 'BTK-CustomRPR2.xml'
+# One row = one interaction. Empty cell = do not set that field.
+#
+# No datatype column: the FOM already states every type and offset.
+# Resolved for reference (do not edit these lines):
+#   EventIdentifier.EventCount        UnsignedInteger16             uint16  2 bytes
+#   EventIdentifier.IssuingObjectIdentifier RTIobjectId                   string  variable  @2
+#   FiringLocation.X                  MeterFloat64                  float64  8 bytes
+#   FiringLocation.Y                  MeterFloat64                  float64  8 bytes  @8
+#   FiringLocation.Z                  MeterFloat64                  float64  8 bytes  @16
+#   FuseType                          FuseTypeEnum16                uint16  2 bytes
+#   QuantityFired                     UnsignedInteger16             uint16  2 bytes
+#   WarheadType                       WarheadTypeEnum16             uint16  2 bytes
+
+entityId,EventIdentifier.EventCount,EventIdentifier.IssuingObjectIdentifier,FiringLocation.X,FiringLocation.Y,FiringLocation.Z,FuseType,QuantityFired,WarheadType
+int-101,,,,,,,,
+int-102,,,,,,,,
+int-103,,,,,,,,

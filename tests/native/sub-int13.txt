@@ -1,0 +1,6 @@
+# HLA 1.3 interaction subscriber. Interactions have no instance identity - nothing to discover,
+# nothing to register; an INT line marks arrival and PARAM lines carry the raw bytes.
+JOIN exec=BTK-IntTest fed=BTK-CustomRPR1.fed federate=IntSub create=1
+INTCLASS name=WeaponFire params=FiringObjectIdentifier,MunitionType,FireMissionIndex mode=sub
+WAIT ms=8000
+QUIT

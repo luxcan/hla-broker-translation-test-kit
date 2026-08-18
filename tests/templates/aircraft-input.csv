@@ -1,0 +1,22 @@
+# class: Aircraft
+# kind: object
+#
+# Generated from FDD (1516-2010) 'BTK-CustomRPR2.xml'
+# One row = one entity. Empty cell = do not set that field.
+#
+# No datatype column: the FOM already states every type and offset.
+# Resolved for reference (do not edit these lines):
+#   AfterburnerOn                     RPRboolean                    uint8  1 bytes
+#   BtkCustomTag                      HLAopaqueData                 hex  variable
+#   BtkCustomValue                    HLAfloat64BE                  float64  8 bytes
+#   EntityIdentifier.FederateIdentifier.SiteID UnsignedInteger16             uint16  2 bytes
+#   EntityIdentifier.FederateIdentifier.ApplicationID UnsignedInteger16             uint16  2 bytes  @2
+#   EntityIdentifier.EntityNumber     UnsignedInteger16             uint16  2 bytes  @4
+#   Marking.MarkingEncodingType       MarkingEncodingEnum8          uint8  1 bytes
+#   Marking.MarkingData               MarkingArray11                hex  11 bytes  @1
+#   Spatial                           SpatialVariantStruct          hex  variable
+
+entityId,AfterburnerOn,BtkCustomTag,BtkCustomValue,EntityIdentifier.FederateIdentifier.SiteID,EntityIdentifier.FederateIdentifier.ApplicationID,EntityIdentifier.EntityNumber,Marking.MarkingEncodingType,Marking.MarkingData:string,Spatial
+1:1:101,,,,,,,,,
+1:1:102,,,,,,,,,
+1:1:103,,,,,,,,,

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x64</Platform>
+    <ProjectGuid>{B2C3D4E5-2222-3333-4444-555566667777}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>BrokerTestKit.Engine</RootNamespace>
+    <AssemblyName>BrokerTestKit.Engine</AssemblyName>
+    <!-- Fixed by vrLinkSharp.dll: mixed-mode C++/CLI, x64, CLR v4. 4.7.2 rather than 4.6.2
+         only because that is the oldest targeting pack installed here; any CLR v4
+         framework works. Drop back to 4.6.2 if you install its Developer Pack. -->
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="vrLinkSharp">
+      <!-- Vendored in-repo (managed shim only); Copy-Local'd so the CLR resolves it normally.
+           Native deps (managedInterface, RTI DLLs) load from the MAK install via PATH at
+           runtime; keep this vendored DLL in sync with the installed VR-Link. -->
+      <HintPath>$(MSBuildProjectDirectory)\..\..\lib\vrlink\vrLinkSharp.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="MakEnvironment.cs" />
+    <Compile Include="FederationConfig.cs" />
+    <Compile Include="FederateConnection.cs" />
+    <Compile Include="UniversalAttributeReader.cs" />
+    <Compile Include="RprCodec.cs" />
+    <Compile Include="AgentHost.cs" />
+    <Compile Include="NativeAgentHost.cs" />
+    <Compile Include="ValueCodec.cs" />
+    <Compile Include="FomModel.cs" />
+    <Compile Include="FomModelCodec.cs" />
+    <Compile Include="FomParsers.cs" />
+    <Compile Include="EntityCsvParser.cs" />
+    <Compile Include="CsvTemplateGenerator.cs" />
+    <Compile Include="NativeTestRunner.cs" />
+    <Compile Include="TestRunner.cs" />
+    <Compile Include="CsvParser.cs" />
+    <Compile Include="TestModel.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

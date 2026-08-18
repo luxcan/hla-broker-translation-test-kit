@@ -1,0 +1,12 @@
+# Expected on Federation B after the broker translates.
+# NOTE: attribute names here are the B-side (customised RPR 2.0) names; the pairing of
+# input step N with output step N is what expresses the broker's translation mapping.
+step,objClass,entityId,attribute,expected,tolerance,datatype
+1,BaseEntity,1:1:101,worldPosition.x,-2696048.0,0.5,float64
+1,BaseEntity,1:1:101,worldPosition.y,-4429591.0,0.5,float64
+1,BaseEntity,1:1:101,worldPosition.z,3701299.0,0.5,float64
+1,BaseEntity,1:1:101,marking,TANK-01,,string
+2,BaseEntity,1:1:102,worldPosition.x,-2696000.0,0.5,float64
+2,BaseEntity,1:1:102,worldPosition.y,-4429500.0,0.5,float64
+2,BaseEntity,1:1:102,worldPosition.z,3701200.0,0.5,float64
+2,BaseEntity,1:1:102,marking,HELO-02,,string

@@ -1,0 +1,10 @@
+# class: BaseEntity
+# tolerance: WorldLocation.*=0.5, BtkCustomValue=0.001
+#
+# What Federation B must show for each entity. Same shape as the input.
+# Column names may DIFFER from the input side - that difference is the broker translation
+# under test. Empty cell means "do not check this attribute for this entity".
+entityId,BtkCustomTag:string,WorldLocation.X,WorldLocation.Y,WorldLocation.Z,BtkCustomValue
+1:1:101,TANK-01,-2696048.0,1234.5,5500000.0,1234.5
+1:1:102,TANK-02,100.25,200.5,300.75,-0.5
+1:1:103,HELO-03,4000.0,5000.0,6000.0,99.25

@@ -1,0 +1,39 @@
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrokerTestKit.Cli", "src\BrokerTestKit.Cli\BrokerTestKit.Cli.csproj", "{A1B2C3D4-1111-2222-3333-444455556666}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrokerTestKit.Engine", "src\BrokerTestKit.Engine\BrokerTestKit.Engine.csproj", "{B2C3D4E5-2222-3333-4444-555566667777}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrokerTestKit.Agent", "src\BrokerTestKit.Agent\BrokerTestKit.Agent.csproj", "{C3D4E5F6-3333-4444-5555-666677778888}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrokerTestKit.Gui", "src\BrokerTestKit.Gui\BrokerTestKit.Gui.csproj", "{D4E5F6A7-4444-5555-6666-777788889999}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A1B2C3D4-1111-2222-3333-444455556666}.Debug|x64.ActiveCfg = Debug|x64
+		{A1B2C3D4-1111-2222-3333-444455556666}.Debug|x64.Build.0 = Debug|x64
+		{A1B2C3D4-1111-2222-3333-444455556666}.Release|x64.ActiveCfg = Release|x64
+		{A1B2C3D4-1111-2222-3333-444455556666}.Release|x64.Build.0 = Release|x64
+		{B2C3D4E5-2222-3333-4444-555566667777}.Debug|x64.ActiveCfg = Debug|x64
+		{B2C3D4E5-2222-3333-4444-555566667777}.Debug|x64.Build.0 = Debug|x64
+		{B2C3D4E5-2222-3333-4444-555566667777}.Release|x64.ActiveCfg = Release|x64
+		{B2C3D4E5-2222-3333-4444-555566667777}.Release|x64.Build.0 = Release|x64
+		{C3D4E5F6-3333-4444-5555-666677778888}.Debug|x64.ActiveCfg = Debug|x64
+		{C3D4E5F6-3333-4444-5555-666677778888}.Debug|x64.Build.0 = Debug|x64
+		{C3D4E5F6-3333-4444-5555-666677778888}.Release|x64.ActiveCfg = Release|x64
+		{C3D4E5F6-3333-4444-5555-666677778888}.Release|x64.Build.0 = Release|x64
+		{D4E5F6A7-4444-5555-6666-777788889999}.Debug|x64.ActiveCfg = Debug|x64
+		{D4E5F6A7-4444-5555-6666-777788889999}.Debug|x64.Build.0 = Debug|x64
+		{D4E5F6A7-4444-5555-6666-777788889999}.Release|x64.ActiveCfg = Release|x64
+		{D4E5F6A7-4444-5555-6666-777788889999}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
