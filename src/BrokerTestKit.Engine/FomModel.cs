@@ -35,6 +35,19 @@ namespace BrokerTestKit.Engine
         /// <summary>Total byte size, or -1 when variable length.</summary>
         public int Size = -1;
 
+        // ---- variantRecordData only -------------------------------------------------
+        /// <summary>Field name of the discriminant, e.g. "DeadReckoningAlgorithm".</summary>
+        public string Discriminant;
+        /// <summary>Datatype of the discriminant, e.g. "DeadReckoningAlgorithmEnum8".</summary>
+        public string DiscriminantType;
+        /// <summary>
+        /// enumerator -&gt; the fixed record that alternative carries, e.g.
+        /// DRM_FPW -&gt; SpatialFPStruct. A variant has no layout until one is chosen, which is
+        /// why a sheet has to declare which.
+        /// </summary>
+        public readonly Dictionary<string, string> Alternatives =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         public override string ToString() { return Name + " (" + Kind + ", " + Size + " bytes)"; }
     }
 
@@ -207,8 +220,19 @@ namespace BrokerTestKit.Engine
         /// </summary>
         public FieldRef Resolve(string className, string attributePath, out string error)
         {
+            return Resolve(className, attributePath, null, out error);
+        }
+
+        /// <param name="variants">
+        /// Attribute path -&gt; chosen alternative, e.g. {"Spatial": "DRM_FPW"}. A variant has no
+        /// fixed layout until one is named, so without this a path that descends into one cannot
+        /// be resolved at all.
+        /// </param>
+        public FieldRef Resolve(string className, string attributePath,
+                                IDictionary<string, string> variants, out string error)
+        {
             error = null;
-            var key = className + "|" + attributePath;
+            var key = className + "|" + attributePath + "|" + ChoiceKey(variants);
             FieldRef hit;
             if (_cache.TryGetValue(key, out hit)) return hit;
 
@@ -230,7 +254,54 @@ namespace BrokerTestKit.Engine
             for (int i = 1; i < parts.Length; i++)
             {
                 FomType t;
-                if (!Types.TryGetValue(typeOfCurrent, out t) || t.Kind != FomKind.FixedRecord)
+                Types.TryGetValue(typeOfCurrent, out t);
+
+                if (t != null && t.Kind == FomKind.Variant)
+                {
+                    var reached = string.Join(".", parts, 0, i);
+
+                    // The discriminant itself is an ordinary field at offset 0.
+                    if (string.Equals(parts[i], t.Discriminant, StringComparison.OrdinalIgnoreCase))
+                    {
+                        typeOfCurrent = t.DiscriminantType;
+                        continue;
+                    }
+
+                    var chosen = Chosen(variants, reached);
+                    if (string.IsNullOrEmpty(chosen))
+                    {
+                        var menu = new List<string>(t.Alternatives.Keys);
+                        menu.Sort(StringComparer.OrdinalIgnoreCase);
+                        error = "'" + reached + "' is a variant record (" + typeOfCurrent +
+                                "); its layout depends on " + t.Discriminant +
+                                ", so the sheet has to say which alternative it means - add " +
+                                "\"# variant: " + reached + "=<one of " +
+                                string.Join(", ", menu.ToArray()) + ">\"";
+                        return null;
+                    }
+
+                    string alternative;
+                    if (!t.Alternatives.TryGetValue(chosen, out alternative))
+                    {
+                        var menu = new List<string>(t.Alternatives.Keys);
+                        menu.Sort(StringComparer.OrdinalIgnoreCase);
+                        error = "'" + chosen + "' is not an alternative of " + typeOfCurrent +
+                                ". Available: " + string.Join(", ", menu.ToArray());
+                        return null;
+                    }
+
+                    offset += VariantPayloadOffset(t);
+                    typeOfCurrent = alternative;
+
+                    // "<path>.<enumerator>" names the alternative's payload as a whole. When the
+                    // alternative carries a scalar rather than a record - RPR 2.0's
+                    // RFModulationType=Amplitude is an enum - that is the only way to address it.
+                    if (string.Equals(parts[i], chosen, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    Types.TryGetValue(typeOfCurrent, out t);
+                }
+
+                if (t == null || t.Kind != FomKind.FixedRecord)
                 {
                     error = "'" + string.Join(".", parts, 0, i) + "' is of type " + typeOfCurrent +
                             ", which has no field '" + parts[i] + "'";
@@ -274,7 +345,36 @@ namespace BrokerTestKit.Engine
         public FieldRef Resolve(string className, string attributePath)
         {
             string ignored;
-            return Resolve(className, attributePath, out ignored);
+            return Resolve(className, attributePath, null, out ignored);
+        }
+
+        public FieldRef Resolve(string className, string attributePath,
+                                IDictionary<string, string> variants)
+        {
+            string ignored;
+            return Resolve(className, attributePath, variants, out ignored);
+        }
+
+        /// <summary>The alternative chosen for this path, or null.</summary>
+        private static string Chosen(IDictionary<string, string> variants, string path)
+        {
+            if (variants == null || string.IsNullOrEmpty(path)) return null;
+            foreach (var kv in variants)
+                if (string.Equals(kv.Key, path, StringComparison.OrdinalIgnoreCase)) return kv.Value;
+            return null;
+        }
+
+        /// <summary>
+        /// Choices fold into the resolution cache key. Without that, one sheet's "Spatial is an
+        /// opaque blob" answer would be served to the next sheet, which declared an alternative.
+        /// </summary>
+        private static string ChoiceKey(IDictionary<string, string> variants)
+        {
+            if (variants == null || variants.Count == 0) return "";
+            var parts = new List<string>();
+            foreach (var kv in variants) parts.Add(kv.Key + "=" + kv.Value);
+            parts.Sort(StringComparer.OrdinalIgnoreCase);
+            return string.Join(";", parts.ToArray());
         }
 
         public string Describe()
@@ -362,8 +462,35 @@ namespace BrokerTestKit.Engine
                         }
                         return a;
                     }
+                case FomKind.Variant:
+                    {
+                        // The whole record aligns to the widest thing it could hold, so the gap
+                        // after the discriminant is the same whichever alternative is in play.
+                        int a = AlignmentOf(t.DiscriminantType, depth + 1);
+                        foreach (var kv in t.Alternatives)
+                        {
+                            var aa = AlignmentOf(kv.Value, depth + 1);
+                            if (aa > a) a = aa;
+                        }
+                        return a;
+                    }
                 default: return 1;
             }
+        }
+
+        /// <summary>
+        /// Byte at which a variant's chosen alternative begins: the discriminant, then padding up
+        /// to the record's alignment.
+        ///
+        /// Measured, for the case we have on the wire: RPR 2.0's Spatial carries a 1-byte
+        /// DeadReckoningAlgorithm and its payload starts at 8, because SpatialFPStruct opens with
+        /// three float64. The other variants in RPR 2.0 have 2-byte discriminants and are
+        /// COMPUTED by this rule rather than measured.
+        /// </summary>
+        public int VariantPayloadOffset(FomType variant)
+        {
+            if (variant == null) return 0;
+            return Pad(SizeOf(variant.DiscriminantType), AlignmentOf(variant.Name));
         }
 
         /// <summary>Round an offset up to the next multiple of <paramref name="align"/>.</summary>

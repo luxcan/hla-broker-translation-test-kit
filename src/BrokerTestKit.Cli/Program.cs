@@ -833,6 +833,25 @@ namespace BrokerTestKit.Cli
             }
         }
 
+        /// <summary>
+        /// Collect repeated <c>--variant Attr=ENUMERATOR</c> flags. A variant record has no layout
+        /// until one alternative is named, so this is how the caller says which.
+        /// </summary>
+        private static Dictionary<string, string> ParseVariants(string[] args)
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 1; i + 1 < args.Length; i++)
+            {
+                if (args[i] != "--variant") continue;
+                var pair = args[i + 1];
+                var eq = pair.IndexOf('=');
+                if (eq <= 0)
+                    throw new FormatException("--variant wants Attribute=ENUMERATOR, got '" + pair + "'");
+                map[pair.Substring(0, eq).Trim()] = pair.Substring(eq + 1).Trim();
+            }
+            return map;
+        }
+
         /// <summary>Locate a native agent binary, walking up from the CLI's own directory.</summary>
         private static string FindNativeAgent(string exeName)
         {
@@ -858,11 +877,17 @@ namespace BrokerTestKit.Cli
         /// </summary>
         private static int RunFom(string[] args)
         {
+            var variants = ParseVariants(args);
             var rest = new List<string>();
-            for (int i = 1; i < args.Length; i++) if (!args[i].StartsWith("--")) rest.Add(args[i]);
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--variant") { i++; continue; }        // flag AND its value
+                if (!args[i].StartsWith("--")) rest.Add(args[i]);
+            }
             if (rest.Count == 0)
             {
-                Console.Error.WriteLine("usage: fom <file.omt|file.xml> [class] [attribute.path ...]");
+                Console.Error.WriteLine("usage: fom <file.omt|file.xml> [class] [attribute.path ...] " +
+                                        "[--variant Attr=ENUMERATOR]");
                 return 2;
             }
 
@@ -901,7 +926,7 @@ namespace BrokerTestKit.Cli
                 Console.WriteLine("attributes of " + cls + ":");
                 foreach (var a in model.AttributesOf(cls))
                 {
-                    var r = model.Resolve(cls, a);
+                    var r = model.Resolve(cls, a, variants);
                     Console.WriteLine(string.Format("  {0,-28} {1,-32} {2}",
                         a, attrs[a], r == null ? "?" : r.CodecSpec + "  size=" + r.Size));
                 }
@@ -913,7 +938,7 @@ namespace BrokerTestKit.Cli
             foreach (var probe in probes)
             {
                 string err;
-                var r = model.Resolve(cls, probe, out err);
+                var r = model.Resolve(cls, probe, variants, out err);
                 if (r == null) { Console.WriteLine("  " + probe + "  -> ERROR: " + err); bad++; }
                 else Console.WriteLine(string.Format("  {0,-28} type={1,-28} offset={2,-4} size={3,-4} codec={4}",
                     probe, r.TypeName, r.Offset, r.Size, r.CodecSpec));
@@ -1016,13 +1041,13 @@ namespace BrokerTestKit.Cli
             Console.WriteLine("resolved datatypes (from the FOM, not the CSV):");
             foreach (var col in sheetIn.Columns)
             {
-                var r = fomA.Resolve(sheetIn.ClassName, col);
+                var r = fomA.Resolve(sheetIn.ClassName, col, sheetIn.Variants);
                 Console.WriteLine(string.Format("  A  {0,-24} {1,-26} {2}",
                     col, r == null ? "?" : r.TypeName, r == null ? "?" : r.CodecSpec));
             }
             foreach (var col in sheetOut.Columns)
             {
-                var r = fomB.Resolve(sheetOut.ClassName, col);
+                var r = fomB.Resolve(sheetOut.ClassName, col, sheetOut.Variants);
                 Console.WriteLine(string.Format("  B  {0,-24} {1,-26} {2}",
                     col, r == null ? "?" : r.TypeName, r == null ? "?" : r.CodecSpec));
             }
@@ -1189,6 +1214,7 @@ namespace BrokerTestKit.Cli
                 if (a == "--expected") { opt.ForExpectations = true; continue; }
                 if (a == "--skip-variable") { opt.SkipVariable = true; continue; }
                 if (a == "--rows" && i + 1 < args.Length) { opt.SampleRows = int.Parse(args[++i]); continue; }
+                if (a == "--variant" && i + 1 < args.Length) { i++; continue; }   // read by ParseVariants
                 if (a == "--max" && i + 1 < args.Length) { opt.MaxColumns = int.Parse(args[++i]); continue; }
                 if (a == "--only" && i + 1 < args.Length)
                 {
@@ -1206,6 +1232,8 @@ namespace BrokerTestKit.Cli
                     "[--expected] [--rows N] [--only a,b,c] [--skip-variable] [--max N]");
                 return 2;
             }
+
+            opt.Variants = ParseVariants(args);
 
             var fom = FomLoader.Load(Resolve(rest[0]));
             var target = rest[1];

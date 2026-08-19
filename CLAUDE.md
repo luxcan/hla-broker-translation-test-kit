@@ -72,6 +72,10 @@ per requirement). Not yet under git — see the version-control note below.
   of the class are deliberate: the CSV's `# class:` is what the FOM PARSER resolves against (bare
   `GroundVehicle`), `class=` in the profile is what the RTI knows (fully qualified). Generate test
   data of any size with `tests/gen-volume-csv.ps1 -Rows N`.
+- **Variant records expand on request** — `template … --variant Spatial=DRM_FPW` writes a
+  `# variant:` directive and turns RPR 2.0's `Spatial` from one hex blob into eleven values at the
+  offsets the FOM implies. Opt-in: name nothing and the column stays hex, so old sheets still pass.
+  Only variable-length arrays now need hand-encoded bytes.
 - ⚠️ **The broker normalises Euler angles.** Keep generated `Orientation` inside ±π (psi, phi) and
   ±π/2 (theta) or the golden file fails on correct broker behaviour — see §9.
 

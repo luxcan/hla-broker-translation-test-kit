@@ -34,6 +34,16 @@ namespace BrokerTestKit.Engine
             public List<string> Include;
             /// <summary>Skip attributes with no fixed size (arrays, variant records).</summary>
             public bool SkipVariable;
+
+            /// <summary>
+            /// Attribute -&gt; chosen alternative, e.g. Spatial -&gt; DRM_FPW.
+            ///
+            /// Name one and that attribute expands into ordinary columns instead of a single hex
+            /// blob. Name none and nothing changes, which is what keeps every existing sheet
+            /// working: this is opt-in, not a new default.
+            /// </summary>
+            public Dictionary<string, string> Variants =
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             /// <summary>Default tolerance written into the directive for float columns.</summary>
             public double FloatTolerance = 0.001;
             /// <summary>
@@ -133,8 +143,40 @@ namespace BrokerTestKit.Engine
         private static void Expand(FomModel fom, string className, string path,
                                    List<Column> into, Options opt, int depth)
         {
+            // A variant only becomes addressable once an alternative is named. Given one, emit the
+            // discriminant and then descend into that alternative's record like any other struct.
+            FomType variant;
+            if (depth < 3 && fom.Types.TryGetValue(TypeOf(fom, className, path), out variant) &&
+                variant != null && variant.Kind == FomKind.Variant)
+            {
+                string chosen;
+                if (opt.Variants != null && opt.Variants.TryGetValue(path, out chosen) &&
+                    !string.IsNullOrEmpty(chosen))
+                {
+                    string carries;
+                    if (variant.Alternatives.TryGetValue(chosen, out carries))
+                    {
+                        Expand(fom, className, path + "." + variant.Discriminant, into, opt, depth + 1);
+
+                        FomType record;
+                        if (fom.Types.TryGetValue(carries, out record) &&
+                            record.Kind == FomKind.FixedRecord)
+                        {
+                            foreach (var f in record.Fields)
+                                Expand(fom, className, path + "." + f.Name, into, opt, depth + 1);
+                            return;
+                        }
+
+                        // The alternative carries a scalar, not a record - one column for it,
+                        // named after the alternative so the sheet reads as what it is.
+                        Expand(fom, className, path + "." + chosen, into, opt, depth + 1);
+                        return;
+                    }
+                }
+            }
+
             string error;
-            var reference = fom.Resolve(className, path, out error);
+            var reference = fom.Resolve(className, path, opt.Variants, out error);
             if (reference == null) return;                 // unaddressable - leave it out entirely
 
             // A fixed record with known field offsets is worth expanding; anything else is a leaf.
@@ -170,6 +212,16 @@ namespace BrokerTestKit.Engine
             into.Add(col);
         }
 
+        /// <summary>The declared type of a path, without caring whether it fully resolves.</summary>
+        private static string TypeOf(FomModel fom, string className, string path)
+        {
+            var members = fom.FindClass(className);
+            if (members == null) return "";
+            var first = path.Split('.')[0];
+            string t;
+            return members.TryGetValue(first, out t) && path.IndexOf('.') < 0 ? t : "";
+        }
+
         private static bool IsByteArray(FomModel fom, string typeName)
         {
             FomType t;
@@ -193,6 +245,16 @@ namespace BrokerTestKit.Engine
             var sb = new StringBuilder();
             sb.Append("# class: ").Append(className).Append('\n');
             sb.Append("# kind: ").Append(isInteraction ? "interaction" : "object").Append('\n');
+
+            // Without this line the columns below cannot be resolved again: the offsets only exist
+            // relative to a chosen alternative.
+            if (opt.Variants != null && opt.Variants.Count > 0)
+            {
+                var picked = new List<string>();
+                foreach (var kv in opt.Variants) picked.Add(kv.Key + "=" + kv.Value);
+                picked.Sort(StringComparer.OrdinalIgnoreCase);
+                sb.Append("# variant: ").Append(string.Join(", ", picked.ToArray())).Append('\n');
+            }
 
             if (opt.ForExpectations)
             {

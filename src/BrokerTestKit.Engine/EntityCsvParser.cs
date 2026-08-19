@@ -56,6 +56,13 @@ namespace BrokerTestKit.Engine
             /// </summary>
             public readonly Dictionary<string, string> Overrides =
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            /// <summary>
+            /// Chosen variant alternatives from the `# variant:` directive, e.g.
+            /// Spatial -&gt; DRM_FPW. A variant record has no layout until one is named, so this is
+            /// what turns Spatial from an opaque blob into addressable sub-fields.
+            /// </summary>
+            public readonly Dictionary<string, string> Variants =
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             /// <summary>Per-column tolerance from the `# tolerance:` directive.</summary>
             public readonly Dictionary<string, double> Tolerances =
                 new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
@@ -150,7 +157,8 @@ namespace BrokerTestKit.Engine
                     "to resolve datatypes");
 
             string error;
-            var reference = fom.Resolve(cls, attributePath, out error);
+            var reference = fom.Resolve(cls, attributePath,
+                                        sheet == null ? null : sheet.Variants, out error);
             if (reference == null)
                 throw new FormatException(Path.GetFileName(file) + ": column '" + attributePath +
                                           "' - " + error);
@@ -260,6 +268,19 @@ namespace BrokerTestKit.Engine
 
             if (key == "class") { sheet.ClassName = value; return; }
             if (key == "kind") { sheet.Kind = value; return; }
+
+            if (key == "variant")
+            {
+                // "# variant: Spatial=DRM_FPW, RelativeSpatial=Static"
+                foreach (var part in value.Split(','))
+                {
+                    var p = part.Trim();
+                    var eq = p.IndexOf('=');
+                    if (eq > 0) sheet.Variants[p.Substring(0, eq).Trim()] = p.Substring(eq + 1).Trim();
+                }
+                return;
+            }
+
             if (key != "tolerance") return;
 
             foreach (var part in value.Split(','))

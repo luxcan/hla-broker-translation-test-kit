@@ -134,13 +134,28 @@ namespace BrokerTestKit.Engine
                 Add(model, t);
             });
 
-            // Variant records are size-indeterminate without the discriminant, so they are
-            // recorded but left unsized: sub-field addressing into them is refused, not guessed.
-            Each(dts, ns, "variantRecordDataTypes", "variantRecordData", e => Add(model, new FomType
+            // A variant has no size of its own - its layout depends on the discriminant - but
+            // the FDD states the whole menu, and throwing that away is what forced test authors to
+            // paste raw bytes for Spatial. Keep the discriminant and every enumerator -> record
+            // mapping; a sheet then names one alternative and the layout is ordinary again.
+            Each(dts, ns, "variantRecordDataTypes", "variantRecordData", e =>
             {
-                Name = Val(e, ns, "name"),
-                Kind = FomKind.Variant,
-            }));
+                var v = new FomType
+                {
+                    Name = Val(e, ns, "name"),
+                    Kind = FomKind.Variant,
+                    Discriminant = Val(e, ns, "discriminant"),
+                    DiscriminantType = Val(e, ns, "dataType"),
+                };
+                foreach (var a in e.Elements(ns + "alternative"))
+                {
+                    var enumerator = Val(a, ns, "enumerator");
+                    var carries = Val(a, ns, "dataType");
+                    if (!string.IsNullOrEmpty(enumerator) && !string.IsNullOrEmpty(carries))
+                        v.Alternatives[enumerator] = carries;
+                }
+                Add(model, v);
+            });
         }
 
         private static void ReadClass(FomModel model, XElement oc, XNamespace ns,

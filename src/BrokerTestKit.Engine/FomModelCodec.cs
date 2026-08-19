@@ -27,7 +27,17 @@ namespace BrokerTestKit.Engine
         /// </summary>
         /// v2: OmtParser now resolves (SuperClass &lt;id&gt;), so every OMT class inherits. Models
         ///     stored by v1 have leaf classes with zero attributes and must not be served.
-        public const int Version = 5;
+        /// v3: FddParser MERGES classes across FOM modules instead of letting a later module's
+        ///     scaffold re-declaration replace the base FOM's. Multi-module models stored by v2
+        ///     are missing attributes outright.
+        /// v4: the OMT's own "string" datatype resolves to text rather than opaque bytes, so RTI
+        ///     object-id fields stop asking the test author for hex.
+        /// v5: fixed-record field offsets include HLA alignment padding. Offsets stored by v4 are
+        ///     too small for any record that mixes field widths, and would read the wire at the
+        ///     wrong position rather than fail.
+        /// v6: variant records carry their discriminant and their enumerator -> record menu, so a
+        ///     sheet can name an alternative and address inside it. v5 models have none of it.
+        public const int Version = 6;
 
         private const string Magic = "BTKFOM";
         private const char Tab = '\t';
@@ -47,9 +57,11 @@ namespace BrokerTestKit.Engine
             {
                 var t = kv.Value;
                 Line(sb, "T", t.Name, t.Kind.ToString(), t.Representation, t.ElementType,
-                     t.Cardinality, Num(t.Size));
+                     t.Cardinality, Num(t.Size), t.Discriminant, t.DiscriminantType);
                 foreach (var f in t.Fields)
                     Line(sb, "f", f.Name, f.DataType, Num(f.Offset), Num(f.Size));
+                foreach (var a in t.Alternatives)
+                    Line(sb, "v", a.Key, a.Value);
             }
 
             WriteTable(sb, m.Classes, "C", "a");
@@ -114,9 +126,16 @@ namespace BrokerTestKit.Engine
                                 ElementType = p[4],
                                 Cardinality = p[5],
                                 Size = int.Parse(p[6], CultureInfo.InvariantCulture),
+                                Discriminant = p.Length > 7 ? p[7] : null,
+                                DiscriminantType = p.Length > 8 ? p[8] : null,
                             };
                             m.Types[type.Name] = type;
                             members = null;
+                            break;
+
+                        case "v":
+                            if (type == null) throw new FormatException("alternative line before its datatype");
+                            type.Alternatives[p[1]] = p[2];
                             break;
 
                         case "f":

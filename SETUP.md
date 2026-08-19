@@ -136,11 +136,24 @@ The FOM decides the columns, so the author never writes a datatype:
 - fixed records are **expanded to leaf sub-fields** with their offsets — `WorldLocation.X/.Y/.Z`,
   `EntityIdentifier.FederateIdentifier.SiteID` — because that is the level people reason about
   and the level tolerances apply at;
-- **variant records and variable-length arrays stay as ONE whole-attribute hex column**
-  (`Spatial`, `ArticulatedParametersArray`). Their internals have no fixed offset, so there is
-  nothing honest to expand them into. This is the one place the sheet is not fill-in-a-number: you
-  supply the encoded bytes. `tests/gen-volume-csv.ps1` shows how, building the 60-byte
-  `SpatialFPStruct` field by field;
+- **variant records expand once you say which alternative you mean.** A variant has no layout
+  until its discriminant is fixed, so name one and the rest is ordinary:
+
+  ```bat
+  BrokerTestKit.Cli.exe template RPR_FOM_v2.0_1516-2010.xml GroundVehicle out.csv ^
+      --variant Spatial=DRM_FPW
+  ```
+
+  writes `# variant: Spatial=DRM_FPW` into the sheet and turns one hex column into eleven values -
+  `Spatial.WorldLocation.X`, `Spatial.Orientation.Psi`, and so on - at offsets 0/8/16/24/32/36…56,
+  which is byte-for-byte the record captured off the wire. The parser reads the directive back, so
+  the sheet stays self-describing. Name nothing and nothing changes: the column stays a single hex
+  blob, and every existing sheet keeps working unaltered;
+
+- **variable-length arrays are still ONE whole-attribute hex column**
+  (`ArticulatedParametersArray`, `PropulsionSystemsData`, `VariableDatums`). Their length is not
+  known until run time, so there is nothing honest to expand them into. This is now the only place
+  the sheet is not fill-in-a-number;
 - opaque byte arrays get a `:string` hint, since a FOM cannot say "these bytes are text".
 
 **Nothing is dropped silently.** If the column cap is hit, the sheet carries a `*** TRUNCATED ***`
@@ -150,8 +163,9 @@ which a normal RPR class walks straight past: `Aircraft` expands to 79 columns, 
 template stopped inside `Marking` and quietly lost `Orientation`, `VelocityVector` and
 `WorldLocation` from a file that looked complete.
 
-Verified across eight class/FOM pairs — RPR 1.0 and 2.0, objects and interactions, 347 columns —
-every generated column resolves back through the parser.
+Verified across ten class/FOM pairs — RPR 1.0 and 2.0, objects and interactions, 571 columns —
+every generated column resolves back through the parser. Of those, **15 still require hex**, all of
+them variable-length arrays; `WeaponFire` and `NatoIFFTransponder` on HLA 1.3 need none at all.
 
 ## Run a golden-file test
 
