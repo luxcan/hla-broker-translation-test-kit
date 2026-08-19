@@ -50,7 +50,52 @@ namespace BrokerTestKit.Gui
         }
         public string Name { get; set; }
         public string DataType { get; set; }
-        public string Resolved { get; set; }
+
+        private string _resolved;
+        /// <summary>What this member will put in the sheet. Recomputed when Choice changes.</summary>
+        public string Resolved
+        {
+            get { return _resolved; }
+            set { _resolved = value; Raise("Resolved"); }
+        }
+
+        /// <summary>Shown first in the variant menu: leave the attribute as one hex blob.</summary>
+        public const string NoVariant = "(none)";
+
+        /// <summary>
+        /// The alternatives this member's variant record offers, NoVariant first; null when it is
+        /// not a variant at all.
+        ///
+        /// A variant record has no layout until one alternative is named - which is why an
+        /// unanswered one can only be written as hex. The FOM states the whole menu, so the picker
+        /// can offer it rather than making the test author look it up.
+        /// </summary>
+        public List<string> Alternatives { get; set; }
+
+        public bool IsVariant { get { return Alternatives != null && Alternatives.Count > 0; } }
+
+        /// <summary>True once a real alternative (not NoVariant) is chosen.</summary>
+        public bool HasChoice
+        {
+            get { return IsVariant && !string.IsNullOrEmpty(_choice) && _choice != NoVariant; }
+        }
+
+        private string _choice;
+        /// <summary>The chosen alternative, e.g. DRM_FPW.</summary>
+        public string Choice
+        {
+            get { return _choice; }
+            set
+            {
+                _choice = value;
+                Raise("Choice"); Raise("HasChoice");
+                var h = ChoiceChanged;
+                if (h != null) h(this);
+            }
+        }
+
+        /// <summary>Owner hook, so the Resolved column can answer for the new choice at once.</summary>
+        public Action<MemberPick> ChoiceChanged;
     }
 
     /// <summary>

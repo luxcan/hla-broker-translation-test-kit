@@ -315,11 +315,11 @@
 
                     <Grid Grid.Row="1">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="340"/>
+                            <ColumnDefinition Width="220"/>
                             <ColumnDefinition Width="12"/>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*" MinWidth="600"/>
                             <ColumnDefinition Width="12"/>
-                            <ColumnDefinition Width="300"/>
+                            <ColumnDefinition Width="240"/>
                         </Grid.ColumnDefinitions>
 
                         <GroupBox Grid.Column="0" Header="Classes and interactions">
@@ -340,9 +340,32 @@
                                 <DataGrid x:Name="MemberGrid" CanUserAddRows="False">
                                     <DataGrid.Columns>
                                         <DataGridCheckBoxColumn Binding="{Binding Selected, UpdateSourceTrigger=PropertyChanged}" Width="34"/>
-                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" Width="2*"/>
-                                        <DataGridTextColumn Header="FOM datatype" Binding="{Binding DataType}" IsReadOnly="True" Width="2*"/>
-                                        <DataGridTextColumn Header="Resolved" Binding="{Binding Resolved}" IsReadOnly="True" Width="*"/>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" Width="*" MinWidth="150"/>
+                                        <DataGridTextColumn Header="FOM datatype" Binding="{Binding DataType}" IsReadOnly="True" Width="*" MinWidth="120"/>
+
+                                        <!-- Only variant-typed members show a dropdown; every other row
+                                             collapses it, so the column reads as "nothing to decide here". -->
+                                        <DataGridTemplateColumn Header="Variant" Width="110">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ComboBox ItemsSource="{Binding Alternatives}"
+                                                              SelectedItem="{Binding Choice, Mode=TwoWay}"
+                                                              ToolTip="This attribute is a variant record - choose which alternative the sheet means.">
+                                                        <ComboBox.Style>
+                                                            <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsVariant}" Value="False">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </ComboBox.Style>
+                                                    </ComboBox>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+
+                                        <DataGridTextColumn Header="Resolved" Binding="{Binding Resolved}" IsReadOnly="True" Width="*" MinWidth="160"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </DockPanel>
@@ -361,6 +384,12 @@
                                     Structs expand to their addressable leaf fields. The resolved offset and
                                     size are written in as comments so the mapping can be audited, and the
                                     tolerance line is included so the same file works as either sheet.
+                                </TextBlock>
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0">
+                                    A variant record (RPR 2.0 Spatial) has no layout until you pick an
+                                    alternative in the Variant column. Pick one and it expands into ordinary
+                                    numeric columns; leave it and it stays a single hex value, so sheets
+                                    written before you chose still read back the same way.
                                 </TextBlock>
                             </StackPanel>
                         </GroupBox>

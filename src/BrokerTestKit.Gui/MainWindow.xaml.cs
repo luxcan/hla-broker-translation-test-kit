@@ -561,19 +561,75 @@ namespace BrokerTestKit.Gui
 
             var names = new List<string>(members.Keys);
             names.Sort(StringComparer.OrdinalIgnoreCase);
+            var className = entry.FullName;
             foreach (var n in names)
             {
-                string err;
-                var r = model.Resolve(entry.FullName, n, out err);
-                _members.Add(new MemberPick
+                var pick = new MemberPick
                 {
                     Selected = false,
                     Name = n,
                     DataType = members[n],
-                    Resolved = r == null ? "(" + err + ")" : r.CodecSpec + (r.Size >= 0 ? "  " + r.Size + "B" : "  var"),
-                });
+                    Alternatives = AlternativesOf(model, members[n]),
+                };
+                if (pick.IsVariant) pick.Choice = MemberPick.NoVariant;   // before the hook: no re-entry
+                Describe(model, className, pick);
+                pick.ChoiceChanged = m => Describe(model, className, m);
+                _members.Add(pick);
             }
             Status(entry.FullName + " — " + _members.Count + (entry.IsInteraction ? " parameters" : " attributes"));
+        }
+
+        /// <summary>
+        /// The alternatives a variant-typed member offers, or null for an ordinary one.
+        ///
+        /// The menu comes straight out of the FDD, so the picker never carries a hardcoded list of
+        /// RPR names - feed it a different FOM and it offers that FOM's alternatives.
+        /// </summary>
+        private static List<string> AlternativesOf(FomModel model, string dataType)
+        {
+            FomType t;
+            if (string.IsNullOrEmpty(dataType) || !model.Types.TryGetValue(dataType, out t) ||
+                t == null || t.Kind != FomKind.Variant || t.Alternatives.Count == 0)
+                return null;
+
+            var menu = new List<string>(t.Alternatives.Keys);
+            menu.Sort(StringComparer.OrdinalIgnoreCase);
+            menu.Insert(0, MemberPick.NoVariant);
+            return menu;
+        }
+
+        /// <summary>
+        /// Fill in the Resolved cell for one member, given the variant choice as it stands.
+        ///
+        /// An unanswered variant resolves to nothing, and the engine's error for that is a
+        /// paragraph naming every alternative - true, but useless in a grid cell next to the
+        /// dropdown that lists them anyway. So say the short version, and once an alternative is
+        /// chosen report what it actually costs: the number of columns it adds to the sheet.
+        /// </summary>
+        private void Describe(FomModel model, string className, MemberPick pick)
+        {
+            if (pick.IsVariant)
+            {
+                if (!pick.HasChoice) { pick.Resolved = "variant — pick one"; return; }
+                try
+                {
+                    var only = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    only[pick.Name] = pick.Choice;
+                    var cols = CsvTemplateGenerator.Columns(model, className, new CsvTemplateGenerator.Options
+                    {
+                        Include = new List<string> { pick.Name },
+                        Variants = only,
+                    });
+                    pick.Resolved = pick.Choice + " → " + cols.Count + " column(s)";
+                }
+                catch (Exception ex) { pick.Resolved = "(" + ex.Message + ")"; }
+                return;
+            }
+
+            string err;
+            var r = model.Resolve(className, pick.Name, out err);
+            pick.Resolved = r == null ? "(" + err + ")"
+                                      : r.CodecSpec + (r.Size >= 0 ? "  " + r.Size + "B" : "  var");
         }
 
         private void PickAll(object sender, RoutedEventArgs e) { foreach (var m in _members) m.Selected = true; }
@@ -589,12 +645,19 @@ namespace BrokerTestKit.Gui
             double tol;
             if (!double.TryParse(TolBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out tol)) tol = 0.001;
 
+            // Without this the GUI could only ever emit hex for a variant, while the CLI's
+            // --variant expanded it - the same FOM producing two different sheets depending on
+            // which surface you used.
+            var variants = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var m in _members) if (m.HasChoice) variants[m.Name] = m.Choice;
+
             return new CsvTemplateGenerator.Options
             {
                 ForExpectations = expected,
                 SampleRows = rows,
                 Include = include.Count > 0 ? include : null,
                 FloatTolerance = tol,
+                Variants = variants,
             };
         }
 
@@ -649,10 +712,15 @@ namespace BrokerTestKit.Gui
             }
             catch (Exception ex) { Fail("Could not write the template", ex); return; }
 
-            int cols = 0;
-            foreach (var m in _members) if (m.Selected) cols++;
+            int cols = 0, chosen = 0;
+            foreach (var m in _members)
+            {
+                if (m.Selected) cols++;
+                if (m.HasChoice) chosen++;
+            }
             Status("Saved " + Path.GetFileName(dlg.FileName) + "  ·  " + entry.FullName +
-                   "  ·  " + (cols > 0 ? cols.ToString() : "all") + " column(s) selected.");
+                   "  ·  " + (cols > 0 ? cols.ToString() : "all") + " column(s) selected" +
+                   (chosen > 0 ? "  ·  " + chosen + " variant(s) expanded." : "."));
         }
 
         // ------------------------------------------------------------- test data ----
@@ -852,7 +920,14 @@ namespace BrokerTestKit.Gui
                 runner.Prepare(input, expected);
 
                 // One row at a time so the grid fills in live rather than all at the end.
+                //
+                // Each call therefore returns its OWN report covering one row, and the totals have
+                // to be assembled here. Two things do not survive that on their own: the duration
+                // (every per-row report times only its own row, so the summary read "in 0.0s" for
+                // every run) and the abort (the runner sets it on the per-row report and breaks a
+                // loop that only ever had one row in it, so the run carried on regardless).
                 var report = new RunReport();
+                var wall = System.Diagnostics.Stopwatch.StartNew();
                 foreach (var step in input)
                 {
                     if (_abort) break;
@@ -877,12 +952,18 @@ namespace BrokerTestKit.Gui
                             return true;
                         });
                     }
+
+                    if (partial.Aborted) { report.AbortReason = partial.AbortReason; break; }
                 }
+                wall.Stop();
+                report.Duration = wall.Elapsed;
 
                 Dispatch(() =>
                 {
                     SummaryText.Text = report.Summary();
-                    Status(report.AllPassed ? "PASS — every row matched." : "FAILURES — see the grid.");
+                    Status(report.Aborted ? "ABORTED — " + report.AbortReason
+                                          : report.AllPassed ? "PASS — every row matched."
+                                                             : "FAILURES — see the grid.");
                     return true;
                 });
             }
