@@ -64,6 +64,7 @@
     <Compile Include="TestRunner.cs" />
     <Compile Include="CsvParser.cs" />
     <Compile Include="TestModel.cs" />
+    <Compile Include="BridgeProfile.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
