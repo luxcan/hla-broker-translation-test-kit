@@ -36,8 +36,29 @@ namespace BrokerTestKit.Engine
             public bool SkipVariable;
             /// <summary>Default tolerance written into the directive for float columns.</summary>
             public double FloatTolerance = 0.001;
-            /// <summary>Cap on generated columns, so a 200-attribute class stays usable.</summary>
-            public int MaxColumns = 60;
+            /// <summary>
+            /// Backstop against a pathological FOM, NOT a usability limit.
+            ///
+            /// It used to be 60, which a normal RPR class blows straight through: Aircraft has 46
+            /// attributes and expands past 70 columns, so the template stopped inside Marking and
+            /// silently lost Orientation, VelocityVector and WorldLocation - the entire kinematic
+            /// state, from a sheet that looked complete. Narrow the sheet with --only, which says
+            /// what you meant; do not rely on a cap to do it.
+            /// </summary>
+            public int MaxColumns = 512;
+        }
+
+        /// <summary>
+        /// What <see cref="Columns"/> produced, plus what it could not fit. Anything dropped is
+        /// named: a template that quietly omits attributes reads as "the FOM does not have them".
+        /// </summary>
+        public sealed class Sheet
+        {
+            public readonly List<Column> Columns = new List<Column>();
+            /// <summary>Whole attributes left out because the column cap was reached.</summary>
+            public readonly List<string> Dropped = new List<string>();
+            /// <summary>Attributes the FOM defines but cannot address (no fixed offset, skipped).</summary>
+            public readonly List<string> Unaddressable = new List<string>();
         }
 
         public sealed class Column
@@ -59,6 +80,19 @@ namespace BrokerTestKit.Engine
         /// <summary>Work out the columns for a class or interaction without writing anything.</summary>
         public static List<Column> Columns(FomModel fom, string className, Options options = null)
         {
+            return Build(fom, className, options).Columns;
+        }
+
+        /// <summary>
+        /// As <see cref="Columns"/>, but also reports what did not make it.
+        ///
+        /// Each attribute is expanded into its own list and only committed if the WHOLE of it
+        /// fits. Cutting mid-attribute is worse than leaving it out: a half-expanded struct
+        /// (Marking.MarkingData[0] … [9] and no [10]) reads as a complete field and encodes to a
+        /// short value.
+        /// </summary>
+        public static Sheet Build(FomModel fom, string className, Options options = null)
+        {
             var opt = options ?? new Options();
             var members = fom.FindClass(className);
             if (members == null)
@@ -68,15 +102,20 @@ namespace BrokerTestKit.Engine
             var names = new List<string>(members.Keys);
             names.Sort(StringComparer.OrdinalIgnoreCase);
 
-            var columns = new List<Column>();
+            var sheet = new Sheet();
             foreach (var attr in names)
             {
                 if (!Wanted(opt.Include, attr)) continue;
 
-                Expand(fom, className, attr, columns, opt, 0);
-                if (columns.Count >= opt.MaxColumns) break;
+                var one = new List<Column>();
+                Expand(fom, className, attr, one, opt, 0);
+
+                if (one.Count == 0) { sheet.Unaddressable.Add(attr); continue; }
+
+                if (sheet.Columns.Count + one.Count > opt.MaxColumns) { sheet.Dropped.Add(attr); continue; }
+                sheet.Columns.AddRange(one);
             }
-            return columns;
+            return sheet;
         }
 
         private static bool Wanted(List<string> include, string attribute)
@@ -87,11 +126,13 @@ namespace BrokerTestKit.Engine
             return false;
         }
 
+        /// <summary>
+        /// Expand ONE attribute into its addressable columns. Deliberately unbounded - the caller
+        /// applies the cap whole-attribute-at-a-time, so this never returns half a struct.
+        /// </summary>
         private static void Expand(FomModel fom, string className, string path,
                                    List<Column> into, Options opt, int depth)
         {
-            if (into.Count >= opt.MaxColumns) return;
-
             string error;
             var reference = fom.Resolve(className, path, out error);
             if (reference == null) return;                 // unaddressable - leave it out entirely
@@ -144,7 +185,8 @@ namespace BrokerTestKit.Engine
         public static string Generate(FomModel fom, string className, Options options = null)
         {
             var opt = options ?? new Options();
-            var columns = Columns(fom, className, opt);
+            var sheet = Build(fom, className, opt);
+            var columns = sheet.Columns;
             var isInteraction = fom.IsInteraction(className);
             var noun = isInteraction ? "interaction" : "entity";
 
@@ -174,6 +216,22 @@ namespace BrokerTestKit.Engine
                 : "Empty cell = do not set that field.\n");
             sb.Append("#\n");
             sb.Append("# No datatype column: the FOM already states every type and offset.\n");
+
+            if (sheet.Unaddressable.Count > 0)
+            {
+                sb.Append("#\n# NOT INCLUDED - the FOM defines these but they have no addressable\n");
+                sb.Append("# fixed layout at this level (variable-length or variant):\n#   ");
+                sb.Append(string.Join(", ", sheet.Unaddressable.ToArray())).Append('\n');
+            }
+            if (sheet.Dropped.Count > 0)
+            {
+                sb.Append("#\n# *** TRUNCATED *** the column cap (").Append(opt.MaxColumns);
+                sb.Append(") was reached, so ").Append(sheet.Dropped.Count);
+                sb.Append(" attribute(s) are MISSING from this sheet:\n#   ");
+                sb.Append(string.Join(", ", sheet.Dropped.ToArray())).Append('\n');
+                sb.Append("# Re-run with --max <n>, or --only <a,b,c> to choose deliberately.\n");
+            }
+
             sb.Append("# Resolved for reference (do not edit these lines):\n");
             foreach (var c in columns)
                 sb.Append("#   ").Append(Pad(c.Path, 34)).Append(Pad(c.TypeName, 30))

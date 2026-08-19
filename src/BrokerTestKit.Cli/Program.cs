@@ -942,27 +942,62 @@ namespace BrokerTestKit.Cli
         /// </summary>
         private static int RunEntity(string[] args)
         {
-            string inPath = null, outPath = null;
-            bool selfTest = false;
+            string inPath = null, outPath = null, profilePath = null, reportPath = null;
+            bool selfTest = false, quiet = false;
+            var opt = new RunOptions();
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+
             for (int i = 1; i < args.Length; i++)
             {
-                if (args[i] == "--selftest") { selfTest = true; continue; }
-                if (args[i].StartsWith("--")) continue;
-                if (inPath == null) inPath = args[i];
-                else if (outPath == null) outPath = args[i];
+                var a = args[i];
+                if (a == "--selftest") { selfTest = true; continue; }
+                if (a == "--quiet")    { quiet = true; continue; }
+                if (a == "--profile" && i + 1 < args.Length) { profilePath = args[++i]; continue; }
+                if (a == "--report"  && i + 1 < args.Length) { reportPath  = args[++i]; continue; }
+                if (a == "--quiesce" && i + 1 < args.Length)
+                { opt.Quiesce = TimeSpan.FromMilliseconds(double.Parse(args[++i], inv)); continue; }
+                if (a == "--timeout" && i + 1 < args.Length)
+                { opt.Timeout = TimeSpan.FromSeconds(double.Parse(args[++i], inv)); continue; }
+                if (a == "--abort-after" && i + 1 < args.Length)
+                { opt.AbortAfterConsecutiveTimeouts = int.Parse(args[++i], inv); continue; }
+                if (a.StartsWith("--")) continue;
+                if (inPath == null) inPath = a;
+                else if (outPath == null) outPath = a;
             }
             if (inPath == null || outPath == null)
             {
-                Console.Error.WriteLine("usage: entity <input.csv> <output.csv> [--selftest]");
+                Console.Error.WriteLine("usage: entity <input.csv> <output.csv> [--profile <file>] " +
+                                        "[--selftest] [--quiesce ms] [--timeout s] [--abort-after N] " +
+                                        "[--report <file.csv>] [--quiet]");
                 return 2;
             }
 
-            var agent13 = FindNativeAgent("btk-agent13.exe");
-            var agent1516e = selfTest ? agent13 : FindNativeAgent("btk-agent1516e.exe");
+            // ---- the rig ---------------------------------------------------------
+            // With --profile the whole rig comes from data: which RTI each side links, which rid
+            // and Assistant port it uses, which federation and FOM modules it joins, which class
+            // carries the data. Without it, the original compiled-in custom-FOM rig is kept so
+            // existing invocations still work.
+            BridgeProfile profile = profilePath == null ? null : BridgeProfile.Load(Resolve(profilePath));
+            if (profile != null)
+            {
+                Console.WriteLine(profile.Describe());
+                Console.WriteLine();
+                if (selfTest)
+                {
+                    Console.Error.WriteLine("--selftest and --profile are mutually exclusive: a profile " +
+                                            "already says which two federations to use.");
+                    return 2;
+                }
+            }
 
-            // A is always HLA 1.3, so its datatypes come from the .omt (the .fed has none).
-            var fomA = FomLoader.Load(Resolve("BTK-CustomRPR1.omt"));
-            var fomB = selfTest ? fomA : FomLoader.Load(Resolve("BTK-CustomRPR2.xml"));
+            var agentA = FindNativeAgent(profile != null ? profile.A.Agent : "btk-agent13.exe");
+            var agentB = selfTest ? agentA
+                                  : FindNativeAgent(profile != null ? profile.B.Agent : "btk-agent1516e.exe");
+
+            // A is HLA 1.3, so its datatypes come from the .omt (the .fed carries none).
+            var fomA = FomLoader.Load(profile != null ? profile.A.Fom : Resolve("BTK-CustomRPR1.omt"));
+            var fomB = selfTest ? fomA
+                                : FomLoader.Load(profile != null ? profile.B.Fom : Resolve("BTK-CustomRPR2.xml"));
             Console.WriteLine("FOM A  " + fomA.Summary());
             Console.WriteLine("FOM B  " + fomB.Summary());
 
@@ -982,43 +1017,94 @@ namespace BrokerTestKit.Cli
             foreach (var col in sheetIn.Columns)
             {
                 var r = fomA.Resolve(sheetIn.ClassName, col);
-                Console.WriteLine(string.Format("  {0,-24} {1,-26} {2}",
+                Console.WriteLine(string.Format("  A  {0,-24} {1,-26} {2}",
+                    col, r == null ? "?" : r.TypeName, r == null ? "?" : r.CodecSpec));
+            }
+            foreach (var col in sheetOut.Columns)
+            {
+                var r = fomB.Resolve(sheetOut.ClassName, col);
+                Console.WriteLine(string.Format("  B  {0,-24} {1,-26} {2}",
                     col, r == null ? "?" : r.TypeName, r == null ? "?" : r.CodecSpec));
             }
             Console.WriteLine();
+            Console.WriteLine(string.Format(inv, "run options: quiesce={0:F0}ms  timeout={1:F1}s  abort-after={2}",
+                opt.Quiesce.TotalMilliseconds, opt.Timeout.TotalSeconds,
+                opt.AbortAfterConsecutiveTimeouts > 0
+                    ? opt.AbortAfterConsecutiveTimeouts + " consecutive timeouts" : "never"));
+            Console.WriteLine();
 
-            var cfgA = new NativeSideConfig
+            NativeSideConfig cfgA, cfgB;
+            IDictionary<string, string> envA = null, envB = null;
+
+            if (profile != null)
             {
-                Label = "A", AgentExe = agent13,
-                FederationName = selfTest ? "BTK-Loopback" : "BTK-FedA",
-                FederateName = "BtkRunnerA", FederateType = "Harness",
-                FedFile = "BTK-CustomRPR1.fed", ObjectClass = sheetIn.ClassName,
-                IsInteraction = sheetIn.IsInteraction,
-            };
-            var cfgB = selfTest
-                ? new NativeSideConfig
+                // The CSV names the class the way the FOM parser knows it (bare "GroundVehicle");
+                // the RTI wants its own spelling, which differs per HLA version. Ask the FOM.
+                cfgA = profile.A.ToSideConfig(agentA, fomA.RtiClassName(sheetIn.ClassName),
+                                              sheetIn.ClassName, sheetIn.IsInteraction);
+                cfgB = profile.B.ToSideConfig(agentB, fomB.RtiClassName(sheetOut.ClassName),
+                                              sheetOut.ClassName, sheetOut.IsInteraction);
+                envA = profile.A.Environment(profile.Licence);
+                envB = profile.B.Environment(profile.Licence);
+            }
+            else
+            {
+                cfgA = new NativeSideConfig
                 {
-                    Label = "B", AgentExe = agent13,
-                    FederationName = "BTK-Loopback",
-                    FederateName = "BtkRunnerB", FederateType = "Harness",
-                    FedFile = "BTK-CustomRPR1.fed", ObjectClass = sheetOut.ClassName,
-                    IsInteraction = sheetOut.IsInteraction,
-                }
-                : new NativeSideConfig
+                    Label = "A", AgentExe = agentA,
+                    FederationName = selfTest ? "BTK-Loopback" : "BTK-FedA",
+                    FederateName = "BtkRunnerA", FederateType = "Harness",
+                    FedFile = "BTK-CustomRPR1.fed", ObjectClass = sheetIn.ClassName,
+                    IsInteraction = sheetIn.IsInteraction,
+                };
+                cfgB = selfTest
+                    ? new NativeSideConfig
+                    {
+                        Label = "B", AgentExe = agentB,
+                        FederationName = "BTK-Loopback",
+                        FederateName = "BtkRunnerB", FederateType = "Harness",
+                        FedFile = "BTK-CustomRPR1.fed", ObjectClass = sheetOut.ClassName,
+                        IsInteraction = sheetOut.IsInteraction,
+                    }
+                    : new NativeSideConfig
+                    {
+                        Label = "B", AgentExe = agentB,
+                        FederationName = "BTK-FedB",
+                        FederateName = "BtkRunnerB", FederateType = "Harness",
+                        FedFile = "BTK-CustomRPR2.xml", ObjectClass = sheetOut.ClassName,
+                        ClassAlias = "TargetClass",
+                        IsInteraction = sheetOut.IsInteraction,
+                    };
+            }
+
+            using (var a = new NativeAgentHost("A", cfgA.AgentExe, "", envA))
+            using (var b = new NativeAgentHost("B", cfgB.AgentExe, "", envB))
+            {
+                var runner = new NativeTestRunner(a, b, cfgA, cfgB, opt);
+
+                // At 4000 rows a line per row is unreadable, so --quiet keeps only the failures
+                // plus a heartbeat. Nothing is lost: --report writes every row to CSV regardless.
+                int total = input.Count;
+                int lastBeat = 0;                 // Progress fires twice per row; beat once
+                var wall = System.Diagnostics.Stopwatch.StartNew();
+                runner.Progress += (step, msg) =>
                 {
-                    Label = "B", AgentExe = agent1516e,
-                    FederationName = "BTK-FedB",
-                    FederateName = "BtkRunnerB", FederateType = "Harness",
-                    FedFile = "BTK-CustomRPR2.xml", ObjectClass = sheetOut.ClassName,
-                    ClassAlias = "TargetClass",
-                    IsInteraction = sheetOut.IsInteraction,
+                    var bad = msg.StartsWith("Fail") || msg.StartsWith("Timeout");
+                    if (!quiet || bad || step == 0)
+                    {
+                        Console.WriteLine("  [row " + step + "] " + msg);
+                    }
+                    else if (step % 100 == 0 && step != lastBeat)
+                    {
+                        lastBeat = step;
+                        var rate = step / Math.Max(wall.Elapsed.TotalSeconds, 0.001);
+                        var eta = TimeSpan.FromSeconds((total - step) / Math.Max(rate, 0.001));
+                        Console.WriteLine(string.Format(inv,
+                            "  ... {0}/{1} rows   {2:F1} rows/s   eta {3:hh\\:mm\\:ss}",
+                            step, total, rate, eta));
+                    }
                 };
 
-            using (var a = new NativeAgentHost("A", cfgA.AgentExe))
-            using (var b = new NativeAgentHost("B", cfgB.AgentExe))
-            {
-                var runner = new NativeTestRunner(a, b, cfgA, cfgB, new RunOptions());
-                runner.Progress += (step, msg) => Console.WriteLine("  [row " + step + "] " + msg);
                 runner.Prepare(input, expected);
                 Console.WriteLine();
 
@@ -1026,15 +1112,64 @@ namespace BrokerTestKit.Cli
 
                 Console.WriteLine();
                 Console.WriteLine("================ RESULTS ================");
+                int shown = 0;
                 foreach (var st in report.Steps)
                 {
+                    if (quiet && st.Outcome == Outcome.Pass) continue;
+                    if (quiet && ++shown > 50)
+                    {
+                        Console.WriteLine("  ... further failures are in the report file only");
+                        break;
+                    }
                     Console.WriteLine(st.ToString());
                     foreach (var f in st.Fields) Console.WriteLine("        " + f);
                 }
                 Console.WriteLine("=========================================");
                 Console.WriteLine(report.Summary());
+
+                if (reportPath != null)
+                {
+                    WriteRunReportCsv(reportPath, report, input);
+                    Console.WriteLine("report  " + System.IO.Path.GetFullPath(reportPath));
+                }
                 return report.AllPassed ? 0 : 1;
             }
+        }
+
+        /// <summary>
+        /// Every row's outcome as CSV (REQ-05). The console shows the failures; this is the
+        /// artefact - it outlives the terminal buffer and diffs cleanly between runs.
+        /// </summary>
+        private static void WriteRunReportCsv(string path, RunReport report, List<InputStep> input)
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var byStep = new Dictionary<int, InputStep>();
+            foreach (var s in input) byStep[s.Step] = s;
+
+            using (var w = new System.IO.StreamWriter(path, false, new System.Text.UTF8Encoding(false)))
+            {
+                foreach (var line in report.Summary().Split('\n')) w.WriteLine("# " + line.TrimEnd('\r'));
+                w.WriteLine("row,entityId,outcome,seconds,latencyMs,message,failedFields");
+                foreach (var st in report.Steps)
+                {
+                    InputStep src;
+                    var id = byStep.TryGetValue(st.Step, out src) ? src.EntityId : "";
+                    var bad = new List<string>();
+                    foreach (var f in st.Fields) if (!f.Ok) bad.Add(f.ToString());
+                    w.WriteLine(string.Format(inv, "{0},{1},{2},{3:F3},{4},{5},{6}",
+                        st.Step, Csv(id), st.Outcome, st.Elapsed.TotalSeconds,
+                        st.Latency.HasValue
+                            ? st.Latency.Value.TotalMilliseconds.ToString("F1", inv) : "",
+                        Csv(st.Message), Csv(string.Join(" | ", bad.ToArray()))));
+                }
+            }
+        }
+
+        private static string Csv(string v)
+        {
+            if (string.IsNullOrEmpty(v)) return "";
+            if (v.IndexOfAny(new[] { ',', '"', '\n', '\r' }) < 0) return v;
+            return "\"" + v.Replace("\"", "\"\"") + "\"";
         }
 
         /// <summary>
@@ -1078,16 +1213,32 @@ namespace BrokerTestKit.Cli
 
             var text = CsvTemplateGenerator.Generate(fom, target, opt);
 
+            var sheet = CsvTemplateGenerator.Build(fom, target, opt);
+
             if (outPath == null) Console.Write(text);
             else
             {
                 System.IO.File.WriteAllText(outPath, text);
-                var cols = CsvTemplateGenerator.Columns(fom, target, opt);
                 Console.WriteLine("wrote " + outPath);
                 Console.WriteLine("  source  " + fom.Describe());
                 Console.WriteLine("  target  " + target +
                                   (fom.IsInteraction(target) ? "  (interaction)" : "  (object class)"));
-                Console.WriteLine("  columns " + cols.Count);
+                Console.WriteLine("  columns " + sheet.Columns.Count);
+            }
+
+            // Anything left out is said out loud, on stderr, whether the sheet went to a file or
+            // to stdout. A template that quietly omits attributes reads as "the FOM lacks them".
+            if (sheet.Unaddressable.Count > 0)
+                Console.Error.WriteLine("  note    " + sheet.Unaddressable.Count +
+                    " attribute(s) have no addressable fixed layout and were left out: " +
+                    string.Join(", ", sheet.Unaddressable.ToArray()));
+            if (sheet.Dropped.Count > 0)
+            {
+                Console.Error.WriteLine("  TRUNCATED: column cap " + opt.MaxColumns + " reached - " +
+                    sheet.Dropped.Count + " attribute(s) MISSING: " +
+                    string.Join(", ", sheet.Dropped.ToArray()));
+                Console.Error.WriteLine("             re-run with --max <n> or --only <a,b,c>.");
+                return 3;
             }
             return 0;
         }
