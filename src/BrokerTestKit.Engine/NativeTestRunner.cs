@@ -57,6 +57,10 @@ namespace BrokerTestKit.Engine
         private readonly RunOptions _opt;
         private readonly HashSet<string> _registered = new HashSet<string>(StringComparer.Ordinal);
 
+        // Instance state, not per-Run state: the GUI calls Run() one row at a time so it can fill
+        // the grid live, and a run-scoped counter would reset on every row and never trip.
+        private int _consecutiveTimeouts;
+
         public event Action<int, string> Progress;
 
         public NativeTestRunner(NativeAgentHost a, NativeAgentHost b,
@@ -119,9 +123,12 @@ namespace BrokerTestKit.Engine
                 var quiesceUntil = DateTime.UtcNow + _opt.Quiesce;
                 while (DateTime.UtcNow < quiesceUntil) System.Threading.Thread.Sleep(20);
 
-                // 2) stimulus on A
+                // 2) stimulus on A.
+                // The clock for BROKER latency starts when A has acknowledged the update - not
+                // before, or the agent's own command round-trip is charged to the broker.
                 string publishError = null;
-                try { Publish(step); }
+                DateTime sentUtc = DateTime.MaxValue;
+                try { Publish(step, out sentUtc); }
                 catch (Exception ex) { publishError = ex.Message; }
 
                 if (publishError != null)
@@ -167,6 +174,18 @@ namespace BrokerTestKit.Engine
                 stepSw.Stop();
                 result.Elapsed = stepSw.Elapsed;
 
+                // Arrival is stamped by the reader thread as the line comes off the agent, so this
+                // is independent of how coarsely the loop above polls.
+                if (match != null && sentUtc != DateTime.MaxValue)
+                {
+                    var arrived = ArrivalOf(match);
+                    if (arrived.HasValue)
+                    {
+                        var d = arrived.Value - sentUtc;
+                        result.Latency = d < TimeSpan.Zero ? TimeSpan.Zero : d;
+                    }
+                }
+
                 // 4) record
                 if (!haveExpectation)
                 {
@@ -210,6 +229,19 @@ namespace BrokerTestKit.Engine
 
                 Report(step.Step, result.Outcome + " - " + result.Message);
                 report.Steps.Add(result);
+
+                if (result.Outcome == Outcome.Timeout) _consecutiveTimeouts++;
+                else _consecutiveTimeouts = 0;
+
+                if (_opt.AbortAfterConsecutiveTimeouts > 0 &&
+                    _consecutiveTimeouts >= _opt.AbortAfterConsecutiveTimeouts)
+                {
+                    report.AbortReason = _consecutiveTimeouts + " consecutive timeout(s) - " +
+                        "federation B has stopped producing anything, so the broker or its RTI is " +
+                        "most likely gone. The remaining rows were not attempted.";
+                    Report(step.Step, "ABORT - " + report.AbortReason);
+                    break;
+                }
             }
 
             sw.Stop();
@@ -226,8 +258,17 @@ namespace BrokerTestKit.Engine
         /// single 24-byte value. They are merged here by byte offset; writing only some sub-fields
         /// still produces a correctly sized value, zero-filled where the test said nothing.
         /// </summary>
-        private void Publish(InputStep step)
+        private void Publish(InputStep step) { DateTime ignored; Publish(step, out ignored); }
+
+        /// <param name="sentUtc">
+        /// When the update was handed to federation A - i.e. the instant the stimulus left the
+        /// harness. Stamped just BEFORE the UPDATE/SENDINT call, not after it: the agent replies
+        /// only when its tick loop next comes round, and on this rig that reply is slower than the
+        /// whole bridge, so stamping afterwards produced a negative latency on every row.
+        /// </param>
+        private void Publish(InputStep step, out DateTime sentUtc)
         {
+            sentUtc = DateTime.MaxValue;
             var buffers = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var cell in step.Attributes)
@@ -268,6 +309,7 @@ namespace BrokerTestKit.Engine
             {
                 // No instance to register: parameters stage, then one SENDINT puts them on the wire.
                 foreach (var kv in buffers) _a.SetParam(_cfgA.Alias, kv.Key, kv.Value);
+                sentUtc = DateTime.UtcNow;
                 _a.SendInteraction(_cfgA.Alias);
                 Report(step.Step, "sent interaction with " + buffers.Count + " parameter(s) [" + id + "]");
                 return;
@@ -277,6 +319,7 @@ namespace BrokerTestKit.Engine
                 _a.Register(id, _cfgA.Alias, SafeInstanceName(id));
 
             foreach (var kv in buffers) _a.SetAttr(id, kv.Key, kv.Value);
+            sentUtc = DateTime.UtcNow;
             _a.Update(id);
 
             Report(step.Step, "published " + buffers.Count + " attribute(s) on " + id);
@@ -331,6 +374,16 @@ namespace BrokerTestKit.Engine
                 }
             }
             return list;
+        }
+
+        /// <summary>When the matched thing actually landed on B, as stamped on arrival.</summary>
+        private static DateTime? ArrivalOf(object item)
+        {
+            var o = item as NativeObject;
+            if (o != null) return o.LastSeenUtc;
+            var i = item as NativeInteraction;
+            if (i != null) return i.ReceivedUtc;
+            return null;
         }
 
         private static string Noun(NativeSideConfig cfg)
