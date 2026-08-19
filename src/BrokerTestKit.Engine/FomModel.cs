@@ -120,6 +120,54 @@ namespace BrokerTestKit.Engine
             return Lookup(Classes, name) == null && Lookup(Interactions, name) != null;
         }
 
+        /// <summary>
+        /// The name the RTI knows this class by - which is not always the name the FOM file, or
+        /// the test author, uses.
+        ///
+        /// An FDD stores classes already qualified (<c>HLAobjectRoot.BaseEntity.…</c>) and that is
+        /// exactly what <c>getObjectClassHandle</c> wants. An OMT stores them WITHOUT the root
+        /// (<c>BaseEntity.PhysicalEntity.Platform.GroundVehicle</c>) while the HLA 1.3 RTI still
+        /// wants <c>ObjectRoot.</c> in front. So a CSV saying "GroundVehicle" has to become two
+        /// different strings depending on which side it is going to, and getting that wrong shows
+        /// up as NameNotFound - or worse, as a federate that joins and then sees nothing.
+        ///
+        /// Returns null when the FOM does not define the name at all.
+        /// </summary>
+        public string RtiClassName(string classOrInteraction)
+        {
+            if (string.IsNullOrEmpty(classOrInteraction)) return null;
+
+            var interaction = Lookup(Classes, classOrInteraction) == null;
+            var key = LookupKey(interaction ? Interactions : Classes, classOrInteraction);
+            if (key == null) return null;
+
+            var root = interaction ? "InteractionRoot." : "ObjectRoot.";
+            if (key.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return key;
+            if (key.StartsWith("HLA", StringComparison.OrdinalIgnoreCase)) return key;   // FDD: already rooted
+            return root + key;
+        }
+
+        /// <summary>As <see cref="Lookup"/>, but returns the KEY rather than the attribute table.</summary>
+        private static string LookupKey(
+            Dictionary<string, Dictionary<string, string>> table, string className)
+        {
+            if (string.IsNullOrEmpty(className)) return null;
+            if (table.ContainsKey(className))
+            {
+                foreach (var kv in table)                       // recover the stored spelling
+                    if (string.Equals(kv.Key, className, StringComparison.OrdinalIgnoreCase)) return kv.Key;
+            }
+            foreach (var kv in table)
+            {
+                var dot = kv.Key.LastIndexOf('.');
+                var leaf = dot < 0 ? kv.Key : kv.Key.Substring(dot + 1);
+                if (string.Equals(leaf, className, StringComparison.OrdinalIgnoreCase)) return kv.Key;
+            }
+            foreach (var kv in table)
+                if (kv.Key.EndsWith("." + className, StringComparison.OrdinalIgnoreCase)) return kv.Key;
+            return null;
+        }
+
         private static Dictionary<string, string> Lookup(
             Dictionary<string, Dictionary<string, string>> table, string className)
         {
@@ -261,9 +309,12 @@ namespace BrokerTestKit.Engine
                     }
                 case FomKind.FixedRecord:
                     {
+                        // Fields do NOT sit end to end - each one starts on a boundary that suits
+                        // its own type, and the gap counts towards the record's size.
                         int total = 0;
                         foreach (var f in t.Fields)
                         {
+                            total = Pad(total, AlignmentOf(f.DataType));
                             var fs = SizeOf(f.DataType);
                             if (fs < 0) return -1;
                             total += fs;
@@ -272,6 +323,55 @@ namespace BrokerTestKit.Engine
                     }
                 default: return -1;
             }
+        }
+
+        /// <summary>
+        /// The byte boundary a value of this type has to start on.
+        ///
+        /// A basic type aligns to its own width; a record aligns to the widest thing inside it.
+        /// This is what puts the three bytes of nothing between IsFrozen and Orientation inside
+        /// RPR 2.0's SpatialFPStruct - a gap the FOM never states outright but every federate
+        /// obeys, so a harness that lays fields end to end reads every field after it from the
+        /// wrong place.
+        /// </summary>
+        public int AlignmentOf(string typeName) { return AlignmentOf(typeName, 0); }
+
+        private int AlignmentOf(string typeName, int depth)
+        {
+            if (depth > 16) return 1;
+
+            int builtin = BuiltinSize(typeName);
+            if (builtin > 0) return builtin;
+
+            FomType t;
+            if (!Types.TryGetValue(typeName, out t)) return 1;
+
+            switch (t.Kind)
+            {
+                case FomKind.Basic: return t.Size > 0 ? t.Size : 1;
+                case FomKind.Simple:
+                case FomKind.Enumerated: return AlignmentOf(t.Representation, depth + 1);
+                case FomKind.Array: return AlignmentOf(t.ElementType, depth + 1);
+                case FomKind.FixedRecord:
+                    {
+                        int a = 1;
+                        foreach (var f in t.Fields)
+                        {
+                            var fa = AlignmentOf(f.DataType, depth + 1);
+                            if (fa > a) a = fa;
+                        }
+                        return a;
+                    }
+                default: return 1;
+            }
+        }
+
+        /// <summary>Round an offset up to the next multiple of <paramref name="align"/>.</summary>
+        private static int Pad(int offset, int align)
+        {
+            if (align <= 1) return offset;
+            var over = offset % align;
+            return over == 0 ? offset : offset + (align - over);
         }
 
         /// <summary>Compute and store field offsets for every fixed record. Called after parsing.</summary>
@@ -285,10 +385,17 @@ namespace BrokerTestKit.Engine
                 foreach (var f in t.Fields)
                 {
                     f.Size = SizeOf(f.DataType);
+                    if (fixedSoFar) offset = Pad(offset, AlignmentOf(f.DataType));
                     f.Offset = fixedSoFar ? offset : -1;
                     if (f.Size < 0) fixedSoFar = false;      // everything after is unaddressable
                     else if (fixedSoFar) offset += f.Size;
                 }
+
+                // NOTE: no padding is added after the LAST field. That is not an oversight - it is
+                // what the wire showed. RPR 2.0's SpatialFPStruct aligns to 8 and its fields end at
+                // 52; a trailing pad would make it 56 and the whole Spatial value 64 bytes. The
+                // value we captured off federation B is 60 (8 for the discriminant + 52). Measured,
+                // not assumed.
             }
             foreach (var t in Types.Values)
                 if (t.Size < 0) t.Size = SizeOf(t.Name);
@@ -390,7 +497,13 @@ namespace BrokerTestKit.Engine
                 case "unsigned short": case "hlaoctetpairbe": case "hlaoctetpairle": return "uint16";
                 case "hlaoctet": case "hlabyte": case "octet": case "boolean":
                 case "rprunsignedinteger8": case "rprunsignedinteger8be": return "uint8";
-                case "hlaasciichar": case "char": return "string";
+                // "string" is the HLA 1.3 OMT's own spelling for text, and it was missing
+                // here - so RTIObjectIdStruct.ID, which is literally (DataType "string"),
+                // fell through to "hex" and the CSV asked the author for raw bytes to
+                // express an object INSTANCE NAME. The FDD side already got this right
+                // via HLAASCIIchar, which is why only the 1.3 sheets were affected.
+                case "hlaasciichar": case "char": case "string":
+                case "hlaasciistring": case "hlaunicodestring": return "string";
                 default: return null;
             }
         }

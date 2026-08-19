@@ -155,15 +155,26 @@ namespace BrokerTestKit.Engine
                 throw new FormatException(Path.GetFileName(file) + ": column '" + attributePath +
                                           "' - " + error);
 
+            // A SUB-FIELD always carries its offset explicitly, even when that offset is zero.
+            // Without the "@0" the runner cannot tell "the FOM says offset 0" from "nobody said",
+            // falls back to a small built-in table of well-known struct fields, and rejects any
+            // sub-field missing from it - VelocityVector.XVelocity, for one. The FOM is the
+            // authority on offsets (REQ-09); say so in the spec and the table never comes up.
+            var dotted = attributePath.IndexOf('.') >= 0;
+            var suffix = dotted
+                ? "@" + reference.Offset.ToString(CultureInfo.InvariantCulture)
+                : (reference.Offset == 0 ? "" : "@" + reference.Offset.ToString(CultureInfo.InvariantCulture));
+
             // An override changes only HOW the bytes are read, never WHERE they are: the offset
             // still comes from the FOM, so a header typo cannot silently move the field.
             string kind;
             if (sheet != null && sheet.Overrides.TryGetValue(attributePath, out kind))
-                return reference.Offset == 0
-                    ? kind
-                    : kind + "@" + reference.Offset.ToString(CultureInfo.InvariantCulture);
+                return kind + suffix;
 
-            return reference.CodecSpec;
+            if (!dotted) return reference.CodecSpec;
+
+            var spec = ValueCodec.ParseSpec(reference.CodecSpec);
+            return spec.Kind + (spec.Width >= 0 ? ":" + spec.Width.ToString(CultureInfo.InvariantCulture) : "") + suffix;
         }
 
         private static double? ToleranceFor(Sheet sheet, string attributePath)

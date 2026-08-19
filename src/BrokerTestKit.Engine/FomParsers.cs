@@ -43,9 +43,51 @@ namespace BrokerTestKit.Engine
                         ReadInteraction(model, ic, ns, "", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
             }
 
+            // Merging alone is not enough: a class can be DEFINED in a later module than the one
+            // that defines its parent (MAK_GroundVehicle lives in MAK-Physical-2_evolved.xml, its
+            // ancestors in the base RPR FDD). Whatever order the files arrive in, settle
+            // inheritance once at the end.
+            Inherit(model.Classes);
+            Inherit(model.Interactions);
+
             model.SourceFile = string.Join(" + ", names.ToArray());
             model.ComputeOffsets();
             return model;
+        }
+
+        /// <summary>
+        /// Push every ancestor's attributes down into its descendants, shallowest first so a
+        /// parent is complete before its children read it. Names are dotted paths, so the class
+        /// tree is already in the keys - no second structure to keep in step.
+        /// </summary>
+        private static void Inherit(Dictionary<string, Dictionary<string, string>> table)
+        {
+            var keys = new List<string>(table.Keys);
+            keys.Sort(delegate(string x, string y)
+            {
+                var d = Depth(x).CompareTo(Depth(y));
+                return d != 0 ? d : string.CompareOrdinal(x, y);
+            });
+
+            foreach (var key in keys)
+            {
+                var dot = key.LastIndexOf('.');
+                if (dot < 0) continue;
+
+                Dictionary<string, string> parent;
+                if (!table.TryGetValue(key.Substring(0, dot), out parent)) continue;
+
+                var mine = table[key];
+                foreach (var kv in parent)
+                    if (!mine.ContainsKey(kv.Key)) mine[kv.Key] = kv.Value;
+            }
+        }
+
+        private static int Depth(string dotted)
+        {
+            int n = 0;
+            for (int i = 0; i < dotted.Length; i++) if (dotted[i] == '.') n++;
+            return n;
         }
 
         private static void ReadDataTypes(FomModel model, XElement root, XNamespace ns)
@@ -111,6 +153,16 @@ namespace BrokerTestKit.Engine
 
             // Attributes accumulate down the tree: a subclass has its own plus every ancestor's.
             var attrs = new Dictionary<string, string>(inherited, StringComparer.OrdinalIgnoreCase);
+
+            // …and ACROSS MODULES they accumulate too. A FOM module that adds a subclass has to
+            // re-declare the whole ancestor chain to reach it, and those re-declarations are
+            // SCAFFOLDING: they carry no attributes. Assigning here instead of merging let a
+            // module wipe the base FOM's class - join RPR 2.0 plus the 16 MAK/NETN modules and
+            // GroundVehicle came back with no EntityIdentifier at all.
+            Dictionary<string, string> already;
+            if (model.Classes.TryGetValue(full, out already))
+                foreach (var kv in already) attrs[kv.Key] = kv.Value;
+
             foreach (var a in oc.Elements(ns + "attribute"))
             {
                 var an = Val(a, ns, "name");
@@ -131,6 +183,11 @@ namespace BrokerTestKit.Engine
 
             var full = prefix.Length == 0 ? name : prefix + "." + name;
             var pars = new Dictionary<string, string>(inherited, StringComparer.OrdinalIgnoreCase);
+
+            Dictionary<string, string> already;
+            if (model.Interactions.TryGetValue(full, out already))
+                foreach (var kv in already) pars[kv.Key] = kv.Value;
+
             foreach (var pm in ic.Elements(ns + "parameter"))
             {
                 var pn = Val(pm, ns, "name");

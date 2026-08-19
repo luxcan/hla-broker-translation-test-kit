@@ -27,7 +27,7 @@ namespace BrokerTestKit.Engine
         /// </summary>
         /// v2: OmtParser now resolves (SuperClass &lt;id&gt;), so every OMT class inherits. Models
         ///     stored by v1 have leaf classes with zero attributes and must not be served.
-        public const int Version = 2;
+        public const int Version = 5;
 
         private const string Magic = "BTKFOM";
         private const char Tab = '\t';
