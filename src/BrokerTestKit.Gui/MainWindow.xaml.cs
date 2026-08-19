@@ -160,6 +160,8 @@ namespace BrokerTestKit.Gui
             CFederate.Text = rec.FederateName;
             CRid.Text = rec.Rti.RidFile;
             CRtiBin.Text = rec.Rti.RtiBin;
+            CAsstPort.Text = rec.Rti.AssistantPort;
+            CConfigDir.Text = rec.Rti.ConfigDir;
             ShowConnResult(rec, rec.Ok);
         }
 
@@ -203,6 +205,8 @@ namespace BrokerTestKit.Gui
             rec.FederateName = (CFederate.Text ?? "").Trim();
             rec.Rti.RidFile = (CRid.Text ?? "").Trim();
             rec.Rti.RtiBin = (CRtiBin.Text ?? "").Trim();
+            rec.Rti.AssistantPort = (CAsstPort.Text ?? "").Trim();
+            rec.Rti.ConfigDir = (CConfigDir.Text ?? "").Trim();
 
             bool ok;
             try { _connections.Save(rec, out ok); }
@@ -211,6 +215,7 @@ namespace BrokerTestKit.Gui
             CRid.Text = rec.Rti.RidFile;          // may now point at the imported copy
             ShowConnResult(rec, ok);
             ConnList.Items.Refresh();
+            ConnPickChanged(null, null);
             PickDefaultFoms();
         }
 
@@ -222,7 +227,8 @@ namespace BrokerTestKit.Gui
                 ? "Saved.  " + rec.Status + NL +
                   "Joins " + Quote(rec.ExecName) + " as " + Quote(rec.FederateName) +
                   (string.IsNullOrEmpty(rec.RtiVersion) ? "" : " on " + rec.RtiVersion) + NL +
-                  "Agent: " + (rec.Fom != null && rec.Fom.IsEvolved ? "btk-agent1516e.exe" : "btk-agent13.exe")
+                  "Agent: " + (rec.Fom != null && rec.Fom.IsEvolved ? "btk-agent1516e.exe" : "btk-agent13.exe") +
+                  (string.IsNullOrWhiteSpace(rec.Rti.AssistantPort) ? "" : NL + "RTI Assistant port " + rec.Rti.AssistantPort)
                 : rec.Status;
         }
 
@@ -232,6 +238,8 @@ namespace BrokerTestKit.Gui
             CName.Text = "";
             CExec.Text = "";
             CFederate.Text = "";
+            CAsstPort.Text = "";
+            CConfigDir.Text = "";
             _lastSuggestion = "";
             CResultBox.Visibility = Visibility.Collapsed;
         }
@@ -280,6 +288,31 @@ namespace BrokerTestKit.Gui
             RunWarning.Visibility = warn == null ? Visibility.Collapsed : Visibility.Visible;
         }
 
+        /// <summary>
+        /// Load a bridge profile: both FOMs registered, both connections created, in one step.
+        /// The CLI reads the same file, so a rig proved headless is the rig shown here.
+        /// </summary>
+        private void ImportProfile(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFileDialog
+            {
+                Title = "Bridge profile",
+                Filter = "Bridge profile (*.profile)|*.profile|All files (*.*)|*.*",
+            };
+            var cfg = MakEnvironment.RtiConfigDir;
+            if (!string.IsNullOrEmpty(cfg) && Directory.Exists(cfg)) dlg.InitialDirectory = cfg;
+            if (dlg.ShowDialog() != true) return;
+
+            try
+            {
+                var report = _connections.ImportProfile(BridgeProfile.Load(dlg.FileName));
+                CResult.Text = report;
+                CResultBox.Visibility = Visibility.Visible;
+                Status("Imported " + Path.GetFileName(dlg.FileName) + ".");
+            }
+            catch (Exception ex) { Fail("Could not import the profile", ex); }
+        }
+
         private void BrowseCRid(object sender, RoutedEventArgs e) { PickRid(CRid); }
 
         private void PickRid(TextBox target)
@@ -291,6 +324,8 @@ namespace BrokerTestKit.Gui
         }
 
         private void BrowseCRtiBin(object sender, RoutedEventArgs e) { PickFolder(CRtiBin); }
+
+        private void BrowseCConfig(object sender, RoutedEventArgs e) { PickFolder(CConfigDir); }
 
         /// <summary>
         /// WPF has no folder picker, and adding a WinForms reference for one is not worth it.
@@ -622,6 +657,24 @@ namespace BrokerTestKit.Gui
 
         // ------------------------------------------------------------- test data ----
 
+        /// <summary>
+        /// Fix the binding path WPF generates for a column whose NAME contains a dot.
+        ///
+        /// The auto-generated path is an indexer, <c>[WorldLocation.X]</c>, and WPF reads the dot
+        /// inside it as a property-path separator - so the column renders EMPTY. Every struct
+        /// sub-field column is spelled that way (WorldLocation.X, Orientation.Psi,
+        /// VelocityVector.XVelocity), so the editor showed blanks for exactly the values a FOM-
+        /// driven sheet is most likely to carry, while the data underneath was perfectly fine.
+        /// A caret escapes the next character inside an indexer.
+        /// </summary>
+        private void CsvColumnGenerated(object sender, DataGridAutoGeneratingColumnEventArgs e)
+        {
+            var text = e.Column as DataGridTextColumn;
+            if (text == null || e.PropertyName == null || e.PropertyName.IndexOf('.') < 0) return;
+
+            text.Binding = new System.Windows.Data.Binding("[" + e.PropertyName.Replace(".", "^.") + "]");
+        }
+
         private void OpenInput(object sender, RoutedEventArgs e)
         {
             var sheet = OpenSheet();
@@ -815,6 +868,10 @@ namespace BrokerTestKit.Gui
                             row.Outcome = captured.Outcome.ToString();
                             row.Message = captured.Message;
                             row.Seconds = captured.Elapsed.TotalSeconds;
+                            row.Latency = captured.Latency.HasValue
+                                ? captured.Latency.Value.TotalMilliseconds.ToString("F1",
+                                      System.Globalization.CultureInfo.InvariantCulture)
+                                : "";
                             row.Fields.Clear();
                             foreach (var f in captured.Fields) row.Fields.Add(FieldRow.From(f));
                             return true;
@@ -844,6 +901,12 @@ namespace BrokerTestKit.Gui
         private static NativeSideConfig Config(string label, FomEntryRecord rec, string exec,
                                                string federate, string className, bool isInteraction)
         {
+            // The CSV names the class the way the FOM PARSER knows it - usually the bare leaf,
+            // "GroundVehicle". The RTI wants its own spelling, and the two differ per HLA version:
+            // "ObjectRoot.BaseEntity....GroundVehicle" on 1.3, "HLAobjectRoot.…" on Evolved. Ask
+            // the FOM rather than making the test author write it out, or type it twice.
+            var rtiName = rec.Model == null ? null : rec.Model.RtiClassName(className);
+
             return new NativeSideConfig
             {
                 Label = label,
@@ -854,8 +917,8 @@ namespace BrokerTestKit.Gui
                 FedFile = rec.StructureFile,
                 JoinFomModules = string.IsNullOrWhiteSpace(rec.Modules) ? null : rec.Modules,
                 Mim = string.IsNullOrWhiteSpace(rec.Mim) ? null : rec.Mim,
-                ObjectClass = className,
-                ClassAlias = className != null && className.Contains(".") ? label + "Target" : null,
+                ObjectClass = string.IsNullOrEmpty(rtiName) ? className : rtiName,
+                ClassAlias = className,
                 IsInteraction = isInteraction,
             };
         }

@@ -189,6 +189,8 @@
                                 <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
                                     <Button Content="Re-check" Click="RecheckConn"/>
                                     <Button Content="Remove" Click="RemoveConn"/>
+                                    <Button Content="Import bridge profile…" Click="ImportProfile"
+                                            ToolTip="Build both federations from a .profile file — the same file the CLI runs from, so the rig the operator sees is the rig CI proves."/>
                                 </StackPanel>
                                 <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
                                     <TextBlock Text="Licence server (shared)" DockPanel.Dock="Left"
@@ -253,6 +255,17 @@
                                         <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseCRtiBin" MinWidth="80"/>
                                         <TextBox x:Name="CRtiBin" TextChanged="ConnRtiChanged"/>
                                     </DockPanel>
+
+                                    <Label Content="FOM search folder (RTI_CONFIG) — blank = the RID file's folder"/>
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseCConfig" MinWidth="80"/>
+                                        <TextBox x:Name="CConfigDir"
+                                                 ToolTip="Where the agent resolves FOM file NAMES. For an Evolved side that joins with the VR-Exchange broker's FOM modules this must be the broker's own bin64 folder, or the modules do not resolve and the federate joins and then sees nothing."/>
+                                    </DockPanel>
+
+                                    <Label Content="RTI Assistant port  — must differ per RTI version"/>
+                                    <TextBox x:Name="CAsstPort"
+                                             ToolTip="RTI_ASSISTANT_PORT. Default 6003. Two RTI versions sharing one port means the second is dropped with &quot;Invalid message version from Assistant&quot;."/>
 
                                     <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                                         <Button Content="Save connection" Click="SaveConn"
@@ -383,11 +396,13 @@
                     </StackPanel>
 
                     <GroupBox Grid.Row="1" Header="INPUT  ·  published on Federation A">
-                        <DataGrid x:Name="InputGrid" AutoGenerateColumns="True" CanUserAddRows="True" IsReadOnly="False"/>
+                        <DataGrid x:Name="InputGrid" AutoGenerateColumns="True" CanUserAddRows="True" IsReadOnly="False"
+                                  AutoGeneratingColumn="CsvColumnGenerated"/>
                     </GroupBox>
 
                     <GroupBox Grid.Row="3" Header="EXPECTED  ·  what Federation B must show. Empty cell = do not check.">
-                        <DataGrid x:Name="ExpectedGrid" AutoGenerateColumns="True" CanUserAddRows="True" IsReadOnly="False"/>
+                        <DataGrid x:Name="ExpectedGrid" AutoGenerateColumns="True" CanUserAddRows="True" IsReadOnly="False"
+                                  AutoGeneratingColumn="CsvColumnGenerated"/>
                     </GroupBox>
                 </Grid>
             </TabItem>
@@ -453,6 +468,7 @@
                                     <DataGridTextColumn Header="Id" Binding="{Binding EntityId}" Width="96"/>
                                     <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="80"/>
                                     <DataGridTextColumn Header="s" Binding="{Binding Seconds, StringFormat=F2}" Width="50"/>
+                                    <DataGridTextColumn Header="broker ms" Binding="{Binding Latency}" Width="76"/>
                                     <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
                                 </DataGrid.Columns>
                                 <DataGrid.RowStyle>

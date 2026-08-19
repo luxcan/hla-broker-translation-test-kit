@@ -128,12 +128,20 @@ namespace BrokerTestKit.Gui
         private string _outcome = "";
         private string _message = "";
         private double _seconds;
+        private string _latency = "";
 
         public int Step { get; set; }
         public string EntityId { get; set; }
         public string Outcome { get { return _outcome; } set { _outcome = value; Raise("Outcome"); } }
         public string Message { get { return _message; } set { _message = value; Raise("Message"); } }
         public double Seconds { get { return _seconds; } set { _seconds = value; Raise("Seconds"); } }
+
+        /// <summary>
+        /// Broker latency for this row, ms - update acknowledged on A to matching state seen on B.
+        /// Separate from <see cref="Seconds"/>, which is the whole step including the harness's own
+        /// quiesce and command round-trips.
+        /// </summary>
+        public string Latency { get { return _latency; } set { _latency = value; Raise("Latency"); } }
         public ObservableCollection<FieldRow> Fields { get; private set; }
 
         public ResultRow() { Fields = new ObservableCollection<FieldRow>(); }

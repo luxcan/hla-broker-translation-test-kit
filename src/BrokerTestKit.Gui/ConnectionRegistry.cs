@@ -1,7 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
+using BrokerTestKit.Engine;
 
 namespace BrokerTestKit.Gui
 {
@@ -50,7 +54,8 @@ namespace BrokerTestKit.Gui
         {
             get
             {
-                return ExecName + (string.IsNullOrEmpty(RtiVersion) ? "" : "  ·  " + RtiVersion);
+                return ExecName + (string.IsNullOrEmpty(RtiVersion) ? "" : "  ·  " + RtiVersion) +
+                       (string.IsNullOrWhiteSpace(Rti.AssistantPort) ? "" : "  ·  asst " + Rti.AssistantPort);
             }
         }
 
@@ -171,6 +176,91 @@ namespace BrokerTestKit.Gui
         }
 
         /// <summary>
+        /// Build both federations from a bridge profile - the same file the CLI runs from.
+        ///
+        /// A rig is a dozen fields per side and every one of them is a way to lose an afternoon:
+        /// the wrong RTI bin, a shared Assistant port, a FOM module that does not resolve. Having
+        /// the GUI and the CI runner read ONE file means a rig that passes headless is the same rig
+        /// the operator sees, rather than a second copy of it that has drifted.
+        ///
+        /// FOM files are imported into the workspace as usual, so a run can still say exactly which
+        /// bytes it used.
+        /// </summary>
+        public string ImportProfile(BridgeProfile profile)
+        {
+            if (profile == null) throw new ArgumentNullException("profile");
+            var report = new StringBuilder();
+
+            foreach (var side in new[] { profile.A, profile.B })
+            {
+                var evolved = (side.Agent ?? "").IndexOf("1516", StringComparison.OrdinalIgnoreCase) >= 0;
+                var structure = Resolve(side, side.FedFile);
+                if (structure == null)
+                    throw new FileNotFoundException("[" + side.Label + "] fedFile not found: " + side.FedFile);
+
+                // The .omt carries the datatypes an HLA 1.3 .fed does not have. On Evolved the FDD
+                // is both, so there is nothing separate to register.
+                var datatypes = evolved ? null : side.Fom;
+                if (!evolved && datatypes != null &&
+                    string.Equals(Path.GetFullPath(datatypes), Path.GetFullPath(structure),
+                                  StringComparison.OrdinalIgnoreCase)) datatypes = null;
+
+                var modules = new List<string>();
+                foreach (var m in (side.JoinFom ?? "").Split(','))
+                {
+                    var name = m.Trim();
+                    if (name.Length == 0) continue;
+                    var full = Resolve(side, name);
+                    if (full == null)
+                        throw new FileNotFoundException("[" + side.Label + "] FOM module not found: " + name);
+                    modules.Add(full);
+                }
+
+                var fomName = Path.GetFileNameWithoutExtension(structure);
+                bool fomOk;
+                var fom = _foms.Register(fomName, evolved, structure, datatypes,
+                                         string.Join(",", modules.ToArray()),
+                                         Resolve(side, side.Mim), out fomOk);
+                report.Append(side.Label).Append(": FOM \"").Append(fom.Name).Append("\" ")
+                      .Append(fomOk ? "ok" : fom.Status);
+                if (modules.Count > 0) report.Append(" (+").Append(modules.Count).Append(" modules)");
+                report.AppendLine();
+
+                var rec = ByName(ConnectionRecord.SuggestName(fomName, side.RtiBin))
+                          ?? new ConnectionRecord();
+                rec.Name = ConnectionRecord.SuggestName(fomName, side.RtiBin);
+                rec.FomName = fom.Name;
+                rec.ExecName = side.Exec;
+                rec.FederateName = string.IsNullOrEmpty(side.FederateName)
+                                 ? "BtkRunner" + side.Label : side.FederateName;
+                rec.Rti.RtiBin = side.RtiBin;
+                rec.Rti.RidFile = side.RidFile;
+                rec.Rti.AssistantPort = side.AssistantPort;
+                rec.Rti.ConfigDir = side.ConfigDir;
+
+                bool connOk;
+                Save(rec, out connOk);
+                report.Append("   connection \"").Append(rec.Name).Append("\" ")
+                      .AppendLine(connOk ? "ok" : rec.Status);
+            }
+
+            return report.ToString().TrimEnd();
+        }
+
+        /// <summary>A profile names FOM files bare; they live under that side's configDir.</summary>
+        private static string Resolve(BridgeProfile.Side side, string file)
+        {
+            if (string.IsNullOrWhiteSpace(file)) return null;
+            if (Path.IsPathRooted(file)) return File.Exists(file) ? file : null;
+            if (!string.IsNullOrWhiteSpace(side.ConfigDir))
+            {
+                var candidate = Path.Combine(side.ConfigDir, file);
+                if (File.Exists(candidate)) return candidate;
+            }
+            return File.Exists(file) ? Path.GetFullPath(file) : null;
+        }
+
+        /// <summary>
         /// Give a fresh workspace one connection per registered FOM, so the app is runnable without
         /// the user first filling in four fields twice.
         /// </summary>
@@ -190,6 +280,9 @@ namespace BrokerTestKit.Gui
                 };
                 rec.Rti.RtiBin = rtiBin ?? "";
                 rec.Rti.RidFile = ridFile ?? "";
+                // Distinct from the start: the moment two connections name different RTI versions
+                // a shared Assistant port silently breaks the second one.
+                rec.Rti.AssistantPort = (6003 + n).ToString(CultureInfo.InvariantCulture);
                 bool ok;
                 Save(rec, out ok);
                 n++;
@@ -197,22 +290,40 @@ namespace BrokerTestKit.Gui
         }
 
         /// <summary>
-        /// Two different RTI VERSIONS cannot run at once: the MAK RTI Assistant listens on a fixed
-        /// TCP 6003, whichever version claims it first serves everyone, and the other version's
-        /// federate is disconnected on a version check. Worth saying at setup, not 30 seconds into
-        /// a run. Returns null when the pair is fine.
+        /// Two different RTI VERSIONS run side by side happily — but only if each has its own
+        /// <c>RTI_ASSISTANT_PORT</c>. Sharing one (including sharing the 6003 default) means the
+        /// second version talks to the first version's Assistant and is dropped with
+        /// <i>"Invalid message version from Assistant"</i>, which names neither the port nor the
+        /// version. Catch it at setup instead.
+        ///
+        /// Note this is about RTI *versions*, not VC builds: federates linking different VC builds
+        /// of the SAME version share a federation normally — the VC decides what a process can
+        /// link, the version decides what goes on the wire.
+        ///
+        /// Returns null when the pair is fine.
         /// </summary>
         public static string CrossVersionWarning(ConnectionRecord a, ConnectionRecord b)
         {
-            if (a == null || b == null) return null;
+            if (a == null || b == null || ReferenceEquals(a, b)) return null;
             var va = a.RtiVersion;
             var vb = b.RtiVersion;
             if (string.IsNullOrEmpty(va) || string.IsNullOrEmpty(vb)) return null;
             if (string.Equals(va, vb, StringComparison.OrdinalIgnoreCase)) return null;
 
-            return "A uses " + va + " and B uses " + vb + ". Two RTI versions cannot run at the " +
-                   "same time — they collide on the RTI Assistant's fixed port 6003. Kill " +
-                   "rtiAssistant.exe before the run, or put both sides on one RTI version.";
+            var pa = (a.Rti.AssistantPort ?? "").Trim();
+            var pb = (b.Rti.AssistantPort ?? "").Trim();
+            if (pa.Length > 0 && pb.Length > 0 && !string.Equals(pa, pb, StringComparison.Ordinal))
+                return null;                                   // distinct ports — this is fine
+
+            var which = pa.Length == 0 && pb.Length == 0
+                ? "Neither sets one, so both default to 6003."
+                : (pa.Length == 0 ? "A does not set one, so it defaults to 6003."
+                                  : (pb.Length == 0 ? "B does not set one, so it defaults to 6003."
+                                                    : "Both use " + pa + "."));
+
+            return "A uses " + va + " and B uses " + vb + " — two RTI versions at once. " + which +
+                   " Give each connection its own RTI Assistant port (for example 6003 and 6004), " +
+                   "or the second RTI is dropped with \"Invalid message version from Assistant\".";
         }
     }
 }

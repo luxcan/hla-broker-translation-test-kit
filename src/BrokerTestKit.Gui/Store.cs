@@ -156,6 +156,23 @@ CREATE INDEX IF NOT EXISTS ix_field_step ON run_field(step_id);
 -- the index that makes 'when did this attribute start failing' cheap
 CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
 ");
+            // CREATE TABLE IF NOT EXISTS cannot add a column to a table that already exists, so
+            // later columns are added one at a time, guarded.
+            AddColumn("connection", "assistant_port", "TEXT NOT NULL DEFAULT ''");
+            AddColumn("connection", "config_dir", "TEXT NOT NULL DEFAULT ''");
+        }
+
+        /// <summary>Add a column unless it is already there. SQLite has no ADD COLUMN IF NOT EXISTS.</summary>
+        private void AddColumn(string table, string column, string decl)
+        {
+            using (var cmd = _cn.CreateCommand())
+            {
+                cmd.CommandText = "PRAGMA table_info(" + table + ")";
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                        if (string.Equals(r.GetString(1), column, StringComparison.OrdinalIgnoreCase)) return;
+            }
+            Exec("ALTER TABLE " + table + " ADD COLUMN " + column + " " + decl + ";");
         }
 
         // ------------------------------------------------------------------ assets --
@@ -310,17 +327,20 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
             using (var cmd = _cn.CreateCommand())
             {
                 cmd.CommandText =
-                    "INSERT INTO connection(name,fom_name,exec_name,federate_name,rti_bin,rid_file,added_utc) " +
-                    "VALUES($n,$f,$e,$fd,$b,$r,$t) " +
+                    "INSERT INTO connection(name,fom_name,exec_name,federate_name,rti_bin,rid_file,assistant_port,config_dir,added_utc) " +
+                    "VALUES($n,$f,$e,$fd,$b,$r,$ap,$cd,$t) " +
                     "ON CONFLICT(name) DO UPDATE SET fom_name=excluded.fom_name, " +
                     "exec_name=excluded.exec_name, federate_name=excluded.federate_name, " +
-                    "rti_bin=excluded.rti_bin, rid_file=excluded.rid_file";
+                    "rti_bin=excluded.rti_bin, rid_file=excluded.rid_file, " +
+                    "assistant_port=excluded.assistant_port, config_dir=excluded.config_dir";
                 cmd.Parameters.AddWithValue("$n", rec.Name);
                 cmd.Parameters.AddWithValue("$f", rec.FomName ?? "");
                 cmd.Parameters.AddWithValue("$e", rec.ExecName ?? "");
                 cmd.Parameters.AddWithValue("$fd", rec.FederateName ?? "");
                 cmd.Parameters.AddWithValue("$b", rec.Rti.RtiBin ?? "");
                 cmd.Parameters.AddWithValue("$r", rec.Rti.RidFile ?? "");
+                cmd.Parameters.AddWithValue("$ap", rec.Rti.AssistantPort ?? "");
+                cmd.Parameters.AddWithValue("$cd", rec.Rti.ConfigDir ?? "");
                 cmd.Parameters.AddWithValue("$t", Utc());
                 cmd.ExecuteNonQuery();
             }
@@ -342,7 +362,7 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
             using (var cmd = _cn.CreateCommand())
             {
                 cmd.CommandText =
-                    "SELECT name,fom_name,exec_name,federate_name,rti_bin,rid_file " +
+                    "SELECT name,fom_name,exec_name,federate_name,rti_bin,rid_file,assistant_port,config_dir " +
                     "FROM connection ORDER BY name";
                 using (var r = cmd.ExecuteReader())
                     while (r.Read())
@@ -356,6 +376,8 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
                         };
                         rec.Rti.RtiBin = r.GetString(4);
                         rec.Rti.RidFile = r.GetString(5);
+                        rec.Rti.AssistantPort = r.IsDBNull(6) ? "" : r.GetString(6);
+                        rec.Rti.ConfigDir = r.IsDBNull(7) ? "" : r.GetString(7);
                         list.Add(rec);
                     }
             }
