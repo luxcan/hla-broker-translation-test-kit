@@ -1010,16 +1010,35 @@ namespace BrokerTestKit.Gui
             return null;
         }
 
+        /// <summary>
+        /// Append one agent line to the transcript box - WITHOUT blocking the agent.
+        ///
+        /// This used to go through Dispatch, i.e. Dispatcher.Invoke, which blocks the caller until
+        /// the UI thread is done. The caller is the agent's stdout reader thread, and that same
+        /// thread is what stamps arrival times on incoming data - so every line the agent produced
+        /// waited for a full log re-render before the NEXT line could be timed. The run's own
+        /// "broker ms" column was partly measuring this method: latency read min 39ms but p95 137ms,
+        /// against 27-32ms for the identical rows under the CLI, which has no such handler.
+        /// Rebuilding LogBox.Text from the whole 400KB buffer on every line is what made it
+        /// expensive, and what made it worse as the run went on.
+        ///
+        /// BeginInvoke queues instead of waiting, and AppendText adds to the existing text rather
+        /// than replacing all of it; the full rebuild now happens only when the buffer is trimmed.
+        /// </summary>
         private void OnAgentLine(string label, string line)
         {
-            Dispatch(() =>
+            var text = "[" + label + "] " + line + "\n";
+            Dispatcher.BeginInvoke(new Action(() =>
             {
-                _log.Append('[').Append(label).Append("] ").Append(line).Append('\n');
-                if (_log.Length > 400000) _log.Remove(0, 200000);      // keep the box bounded
-                LogBox.Text = _log.ToString();
+                _log.Append(text);
+                if (_log.Length > 400000)
+                {
+                    _log.Remove(0, 200000);                        // keep the box bounded
+                    LogBox.Text = _log.ToString();                 // the costly path, on trim only
+                }
+                else LogBox.AppendText(text);
                 LogBox.ScrollToEnd();
-                return true;
-            });
+            }));
         }
 
         private void ResultSelected(object sender, SelectionChangedEventArgs e)
