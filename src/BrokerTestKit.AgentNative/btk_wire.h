@@ -179,7 +179,18 @@ inline std::string upper(const std::string& s)
 
 inline std::string trim(const std::string& s)
 {
-    size_t a = s.find_first_not_of(" \t\r\n");
+    // A UTF-8 BOM counts as leading whitespace here. Two entirely ordinary things put one in
+    // front of the first command: an editor saving a script file as "UTF-8 with signature",
+    // and .NET's Process.StandardInput, which inherits the parent CONSOLE's encoding and
+    // writes the preamble the moment the writer is created. Either way the agent used to
+    // reject a command that reads as perfectly correct in the transcript - "unknown verb
+    // 'JOIN'" with an invisible character in front of it - and only in some shells.
+    size_t z = 0;
+    if (s.size() >= 3 &&
+        (unsigned char)s[0] == 0xEF && (unsigned char)s[1] == 0xBB && (unsigned char)s[2] == 0xBF)
+        z = 3;
+
+    size_t a = s.find_first_not_of(" \t\r\n", z);
     if (a == std::string::npos) return std::string();
     size_t b = s.find_last_not_of(" \t\r\n");
     return s.substr(a, b - a + 1);

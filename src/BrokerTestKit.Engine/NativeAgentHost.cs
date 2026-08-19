@@ -73,6 +73,16 @@ namespace BrokerTestKit.Engine
     public sealed class NativeAgentHost : IDisposable
     {
         private readonly Process _proc;
+        /// <summary>
+        /// The agent's stdin, wrapped so the encoding is OURS and not the caller's.
+        ///
+        /// Process.StandardInput inherits the console's encoding on .NET Framework. Launch the
+        /// CLI from a UTF-8 console and the very first write emits a BYTE-ORDER MARK, which the
+        /// agent reads as part of the first word: "unknown verb '﻿JOIN'". The rig then fails
+        /// on a command that is plainly correct in the transcript, and only when run from certain
+        /// shells. Pin it to UTF-8 without a BOM.
+        /// </summary>
+        private readonly StreamWriter _stdin;
         private readonly ConcurrentQueue<string> _lines = new ConcurrentQueue<string>();
         private readonly List<string> _transcript = new List<string>();
         private readonly object _gate = new object();
@@ -119,6 +129,8 @@ namespace BrokerTestKit.Engine
             _proc.OutputDataReceived += (s, e) => { if (e.Data != null) OnLine(e.Data); };
             _proc.ErrorDataReceived += (s, e) => { if (e.Data != null) OnStdErr(e.Data); };
             _proc.Start();
+            _stdin = new StreamWriter(_proc.StandardInput.BaseStream,
+                                      new UTF8Encoding(false)) { AutoFlush = true };
             _proc.BeginOutputReadLine();
             _proc.BeginErrorReadLine();
         }
@@ -150,8 +162,8 @@ namespace BrokerTestKit.Engine
         public void Send(string command)
         {
             if (HasExited) throw new InvalidOperationException(Label + ": agent has exited");
-            _proc.StandardInput.WriteLine(command);
-            _proc.StandardInput.Flush();
+            _stdin.WriteLine(command);
+            _stdin.Flush();
         }
 
         /// <summary>
@@ -421,8 +433,8 @@ namespace BrokerTestKit.Engine
             {
                 if (!HasExited)
                 {
-                    _proc.StandardInput.WriteLine("QUIT");
-                    _proc.StandardInput.Flush();
+                    _stdin.WriteLine("QUIT");
+                    _stdin.Flush();
                     _proc.WaitForExit(5000);
                 }
             }

@@ -329,11 +329,16 @@ static void cmdClass(const Kv& kv)
     std::string name  = btk::get(kv, "name");
     std::string attrs = btk::get(kv, "attrs");
     std::string mode  = btk::lower(btk::get(kv, "mode", "pubsub"));
+    // Short alias used by REGISTER/SETATTR, so a script need not repeat the whole
+    // ObjectRoot.BaseEntity.PhysicalEntity.Platform.GroundVehicle path every line.
+    // INTCLASS below and BOTH commands in the Evolved agent already did this; object
+    // CLASS here did not, which made "as=" silently do nothing on HLA 1.3.
+    std::string label = btk::get(kv, "as", name);
     if (name.empty()) { btk::errLine("CLASS needs name="); return; }
 
     RTI::ObjectClassHandle ch = rti().getObjectClassHandle(name.c_str());
-    g_classH[name] = ch;
-    g_classN[ch]   = name;
+    g_classH[label] = ch;
+    g_classN[ch]    = label;
 
     std::vector<std::string> list = btk::splitList(attrs);
     RTI::AttributeHandleSet* set = RTI::AttributeHandleSetFactory::create((RTI::ULong)list.size());
@@ -348,10 +353,10 @@ static void cmdClass(const Kv& kv)
                 // The most useful diagnostic this tool can give: the FED does not define it.
                 delete set;
                 btk::errLine("attribute '" + list[i] + "' is not defined on class '" + name +
-                             "' in this FED - check the customised FOM");
+                             "' in this FED - check the FOM");
                 return;
             }
-            g_attrH[name + "::" + list[i]] = ah;
+            g_attrH[label + "::" + list[i]] = ah;
             g_attrN[ah] = list[i];
             set->add(ah);
         }
@@ -364,7 +369,7 @@ static void cmdClass(const Kv& kv)
     catch (...) { delete set; throw; }
 
     delete set;
-    btk::say("OK CLASS name=" + name + " handle=" + U(ch) +
+    btk::say("OK CLASS name=" + label + " handle=" + U(ch) +
              " attrs=" + U(list.size()) + " mode=" + mode);
 }
 
