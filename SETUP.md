@@ -97,6 +97,82 @@ If it cannot reach the RTI, check `RTI_RID_FILE` points at **this repo's** `conf
 MAK's stock rid expects an `rtiexec` and fails with *"Failed to create a reliable connection to
 the RTI Forwarder"*.
 
+## Configure the rig
+
+Everything about the two federations lives in a **bridge profile**, not in code:
+
+```
+config\bridge-stock-rpr.profile
+```
+
+One `[A]` and one `[B]` section, each naming the agent binary, the RTI install whose `bin` goes
+on `PATH`, the rid file, `RTI_ASSISTANT_PORT`, `RTI_CONFIG`, the federation and FOM to join, and
+the HLA class the test data travels on. Paths are absolute or relative to the profile itself.
+
+Point it at a different rig by editing that file — nothing is compiled in. The profile is
+validated on load, so a missing rid, a missing FOM module or two RTI installs sharing one
+Assistant port fail immediately with a named reason instead of an hour later as silence.
+
+Two entries deserve attention because they are the ones that fail quietly:
+
+- **`[B] configDir`** must be the **VR-Exchange `bin64`** directory, not `config\`. The Evolved
+  broker joins with 16 FOM modules from `bin64\MAK-1516e-Config.xml` and those names have to
+  resolve to the broker's own copies.
+- **`[B] joinFom`** must list those same 16 modules. A federate that joins with only the base FDD
+  has a different FDD from the broker and receives **nothing at all** — no error, no warning.
+
+## Generate test data from a FOM
+
+Nothing about any FOM is compiled in. Point the generator at whichever `.omt` or FDD you were
+given, name a class or an interaction, and it emits the sheet:
+
+```bat
+BrokerTestKit.Cli.exe template <fom.omt|fom.xml> <ClassOrInteraction> out.csv ^
+    [--expected] [--rows N] [--only a,b,c] [--max N] [--skip-variable]
+```
+
+The FOM decides the columns, so the author never writes a datatype:
+
+- fixed records are **expanded to leaf sub-fields** with their offsets — `WorldLocation.X/.Y/.Z`,
+  `EntityIdentifier.FederateIdentifier.SiteID` — because that is the level people reason about
+  and the level tolerances apply at;
+- **variant records and variable-length arrays stay as ONE whole-attribute hex column**
+  (`Spatial`, `ArticulatedParametersArray`). Their internals have no fixed offset, so there is
+  nothing honest to expand them into. This is the one place the sheet is not fill-in-a-number: you
+  supply the encoded bytes. `tests/gen-volume-csv.ps1` shows how, building the 60-byte
+  `SpatialFPStruct` field by field;
+- opaque byte arrays get a `:string` hint, since a FOM cannot say "these bytes are text".
+
+**Nothing is dropped silently.** If the column cap is hit, the sheet carries a `*** TRUNCATED ***`
+block naming every missing attribute, the CLI repeats it on stderr, and the exit code is 3. The
+cap defaults to 512 — a backstop, not a way to narrow a sheet; use `--only` for that. It was 60,
+which a normal RPR class walks straight past: `Aircraft` expands to 79 columns, so the old
+template stopped inside `Marking` and quietly lost `Orientation`, `VelocityVector` and
+`WorldLocation` from a file that looked complete.
+
+Verified across eight class/FOM pairs — RPR 1.0 and 2.0, objects and interactions, 347 columns —
+every generated column resolves back through the parser.
+
+## Run a golden-file test
+
+Start the bridge, then run the CSV pair:
+
+```bat
+cd C:\MAK\vrexchange2.9\bin64
+start vrx.exe -l BTK-Bridge.xml -G
+
+BrokerTestKit.Cli.exe entity in.csv expected.csv --profile config\bridge-stock-rpr.profile ^
+    --quiesce 50 --timeout 15 --quiet --report run-report.csv
+```
+
+`--quiet` prints failures and a rows/s heartbeat instead of a line per row; `--report` writes
+every row's outcome to CSV regardless. Exit code is 0 only if every row passed.
+
+`tests\gen-volume-csv.ps1 -Rows N` generates a matching input/expected pair of any size for this
+rig — useful for volume runs. Read its header before changing the values: the numbers are chosen
+so that **no tolerance is needed anywhere**, and the Euler angles are deliberately kept inside
+their legal ranges because the broker normalises anything outside them.
+
 ## Where the app keeps its data
 
 The GUI stores its SQLite database and every imported FOM **beside the exe**

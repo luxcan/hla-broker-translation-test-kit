@@ -26,8 +26,8 @@ per requirement). Not yet under git — see the version-control note below.
   decisions, the harness shape, FOM-rename workflow, and the open questions. **Start here.**
 - **[docs/mak-rti-knowledge.md](docs/mak-rti-knowledge.md)** - MAK RTI facts proven on this machine:
   the VC/ABI islands per install, why ONE agent binary serves 4.6.1 and 5.0.1, the rtiAssistant
-  port-6003 collision that blocks two RTI versions at once, and the rid parameter diff across
-  versions. **Consult before any cross-RTI or version question.**
+  port-6003 collision and the `RTI_ASSISTANT_PORT` fix, the rid parameter diff across versions,
+  the VR-Exchange config map (§8) and the working A→broker→B bridge (§9). **Consult before any cross-RTI or version question.**
 - **[docs/vr-link-knowledge.md](docs/vr-link-knowledge.md)** — distilled VR-Link API
   knowledge (C# binding, the Universal HLA generic layer, joining federations, encoding,
   time management, HLA 1.3 vs Evolved). **Consult this for any VR-Link API question** instead
@@ -35,7 +35,9 @@ per requirement). Not yet under git — see the version-control note below.
 
 ## Stack / environment facts
 
-- Vendor: **MAK**. RTI = MAK RTI. Broker = **VR-Exchange 2.5.1** (`C:\MAK\vrexchange2.5.1`).
+- Vendor: **MAK**. RTI = MAK RTI. Broker = **VR-Exchange 2.9** (`C:\MAK\vrexchange2.9`) — x64,
+  built **VC14**, `bin64` only. ⚠️ `vrexchange2.5.1` is also installed but is **x86 / VC10** and a
+  dead end: it cannot load any VC14+ RTI. Always check which one you are looking at.
 - Harness language = **C# on VR-Link 5.9** (`C:\MAK\vrlink5.9`; ref `vrLinkSharp.dll`,
   namespace `makVrl`). The C# binding selects HLA version at **runtime**, so one process
   holds both the 1.3 and the Evolved connection.
@@ -54,6 +56,24 @@ per requirement). Not yet under git — see the version-control note below.
   `/std:c++14` and `/DRTI_USES_STD_FSTREAM` are mandatory, `RTIambassador` connects inside its
   constructor so it must never be a global, and on Evolved FOM modules go to **join**
   (`joinfom=`) because create-time modules are silently dropped.
+- **The bridge works end to end** — `tests/native/run-bridge.ps1` publishes stock RPR 1.0 on
+  HLA 1.3 / RTI 4.5.1(vc14), lets VR-Exchange 2.9 translate, and asserts what stock RPR 2.0 on
+  Evolved / RTI 5.0.1 receives. Exits 0. `EntityIdentifier`/`EntityType`/`Marking` arrive
+  byte-for-byte; `WorldLocation` arrives inside the RPR 2.0 `Spatial` variant record, which is
+  the proof of real translation. **The one thing that blocked it for a long time:** the 1516e
+  broker joins with 16 extra FOM modules from `bin64\MAK-1516e-Config.xml`, and a federate that
+  joins with only the base FDD receives *nothing, silently*. See
+  [mak-rti-knowledge.md](docs/mak-rti-knowledge.md) §9 before debugging any Evolved federate
+  that joins cleanly and then sees no data.
+- **The rig is DATA, not code** — `config/bridge-stock-rpr.profile` (`BridgeProfile.cs`) holds both
+  sides: agent binary, RTI bin, rid, `RTI_ASSISTANT_PORT`, `RTI_CONFIG`, federation, FOM + join
+  modules, HLA class. `BrokerTestKit.Cli.exe entity in.csv expected.csv --profile <file>` runs a
+  golden file over it (`--quiesce ms`, `--timeout s`, `--quiet`, `--report out.csv`). Two spellings
+  of the class are deliberate: the CSV's `# class:` is what the FOM PARSER resolves against (bare
+  `GroundVehicle`), `class=` in the profile is what the RTI knows (fully qualified). Generate test
+  data of any size with `tests/gen-volume-csv.ps1 -Rows N`.
+- ⚠️ **The broker normalises Euler angles.** Keep generated `Orientation` inside ±π (psi, phi) and
+  ±π/2 (theta) or the golden file fails on correct broker behaviour — see §9.
 
 ## Conventions
 
