@@ -44,6 +44,18 @@ namespace BrokerTestKit.Engine
             /// </summary>
             public Dictionary<string, string> Variants =
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            /// <summary>
+            /// Attribute -&gt; how many elements of a dynamic array to lay out, e.g.
+            /// PropulsionSystemsData -&gt; 2.
+            ///
+            /// A dynamic array has no columns of its own because its LENGTH IS ITS CONTENT - RPR
+            /// encodes these "without array length, containing only the elements", so nothing in
+            /// the FOM says how many there are. Name a count and the elements become ordinary
+            /// columns; name none and the attribute stays a single hex value.
+            /// </summary>
+            public Dictionary<string, int> Arrays =
+                new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             /// <summary>Default tolerance written into the directive for float columns.</summary>
             public double FloatTolerance = 0.001;
             /// <summary>
@@ -143,6 +155,31 @@ namespace BrokerTestKit.Engine
         private static void Expand(FomModel fom, string className, string path,
                                    List<Column> into, Options opt, int depth)
         {
+            // A dynamic array has no columns until the sheet says how many elements it carries -
+            // nothing in the FOM can say, because the length IS the content. Given a count, lay
+            // out each element and let the ordinary struct expansion below do the rest.
+            FomType array;
+            if (depth < 3 && fom.Types.TryGetValue(TypeOf(fom, className, path), out array) &&
+                array != null && array.Kind == FomKind.Array)
+            {
+                int count;
+                if (opt.Arrays != null && opt.Arrays.TryGetValue(path, out count) && count > 0)
+                {
+                    int elementSize;
+                    string why;
+                    if (fom.ArrayIndexable(array, out elementSize, out why))
+                    {
+                        // Same depth on purpose: an element stands in for the attribute itself, so
+                        // its own fields still get the full expansion budget.
+                        for (int i = 0; i < count; i++)
+                            Expand(fom, className,
+                                   path + "[" + i.ToString(CultureInfo.InvariantCulture) + "]",
+                                   into, opt, depth);
+                        return;
+                    }
+                }
+            }
+
             // A variant only becomes addressable once an alternative is named. Given one, emit the
             // discriminant and then descend into that alternative's record like any other struct.
             FomType variant;
@@ -254,6 +291,17 @@ namespace BrokerTestKit.Engine
                 foreach (var kv in opt.Variants) picked.Add(kv.Key + "=" + kv.Value);
                 picked.Sort(StringComparer.OrdinalIgnoreCase);
                 sb.Append("# variant: ").Append(string.Join(", ", picked.ToArray())).Append('\n');
+            }
+
+            // Same reason as the variant line: the element columns below only mean anything
+            // against a stated count, since the array itself carries none.
+            if (opt.Arrays != null && opt.Arrays.Count > 0)
+            {
+                var sized = new List<string>();
+                foreach (var kv in opt.Arrays)
+                    sized.Add(kv.Key + "=" + kv.Value.ToString(CultureInfo.InvariantCulture));
+                sized.Sort(StringComparer.OrdinalIgnoreCase);
+                sb.Append("# array: ").Append(string.Join(", ", sized.ToArray())).Append('\n');
             }
 
             if (opt.ForExpectations)

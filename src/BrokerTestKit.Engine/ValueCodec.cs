@@ -272,6 +272,14 @@ namespace BrokerTestKit.Engine
             if (dot < 0) { attribute = p; subField = null; return; }
             attribute = p.Substring(0, dot);
             subField = p.Substring(dot + 1);
+
+            // An array subscript belongs to the PATH, not to the attribute. The RTI knows
+            // "PropulsionSystemsData"; it has never heard of "PropulsionSystemsData[1]". Leaving
+            // the subscript on would publish each element as its own attribute - one that does not
+            // exist - instead of merging them into the single value they actually are.
+            var open = attribute.IndexOf('[');
+            if (open > 0 && attribute.EndsWith("]", StringComparison.Ordinal))
+                attribute = attribute.Substring(0, open);
         }
 
         /// <summary>

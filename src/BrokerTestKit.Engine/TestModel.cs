@@ -16,6 +16,17 @@ namespace BrokerTestKit.Engine
         /// <summary>Per-field tolerance for numeric compares. Null = exact.</summary>
         public double? Tolerance;
 
+        /// <summary>
+        /// Full byte size of the WHOLE attribute this cell belongs to, or -1 when unknown.
+        ///
+        /// Set from the FOM for dotted paths. Several columns merge into one attribute value, and
+        /// a sheet is allowed to fill only some of them - the generated template says so outright
+        /// ("Empty cell = do not set that field"). Without this the merged value is only as long
+        /// as the last field the sheet happened to write, and the far side receives a short
+        /// attribute.
+        /// </summary>
+        public int AttributeSize = -1;
+
         public override string ToString() { return Name + "=" + Value; }
     }
 

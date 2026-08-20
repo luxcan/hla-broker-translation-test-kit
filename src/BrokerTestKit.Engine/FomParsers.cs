@@ -124,6 +124,7 @@ namespace BrokerTestKit.Engine
                 Kind = FomKind.Array,
                 ElementType = Val(e, ns, "dataType"),
                 Cardinality = Val(e, ns, "cardinality"),
+                Encoding = Val(e, ns, "encoding"),
             }));
 
             Each(dts, ns, "fixedRecordDataTypes", "fixedRecordData", e =>

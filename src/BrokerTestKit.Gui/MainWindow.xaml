@@ -343,24 +343,40 @@
                                         <DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" Width="*" MinWidth="150"/>
                                         <DataGridTextColumn Header="FOM datatype" Binding="{Binding DataType}" IsReadOnly="True" Width="*" MinWidth="120"/>
 
-                                        <!-- Only variant-typed members show a dropdown; every other row
-                                             collapses it, so the column reads as "nothing to decide here". -->
-                                        <DataGridTemplateColumn Header="Variant" Width="110">
+                                        <!-- One column, because a member is never both: a variant needs an
+                                             alternative named, a dynamic array needs an element count, and
+                                             every other row collapses both so the cell reads as
+                                             "nothing to decide here". -->
+                                        <DataGridTemplateColumn Header="Variant / elements" Width="126">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
-                                                    <ComboBox ItemsSource="{Binding Alternatives}"
-                                                              SelectedItem="{Binding Choice, Mode=TwoWay}"
-                                                              ToolTip="This attribute is a variant record - choose which alternative the sheet means.">
-                                                        <ComboBox.Style>
-                                                            <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsVariant}" Value="False">
-                                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </ComboBox.Style>
-                                                    </ComboBox>
+                                                    <Grid>
+                                                        <ComboBox ItemsSource="{Binding Alternatives}"
+                                                                  SelectedItem="{Binding Choice, Mode=TwoWay}"
+                                                                  ToolTip="This attribute is a variant record - choose which alternative the sheet means.">
+                                                            <ComboBox.Style>
+                                                                <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsVariant}" Value="False">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </ComboBox.Style>
+                                                        </ComboBox>
+                                                        <TextBox Text="{Binding Elements, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                 ToolTip="How many elements this array carries. The FOM cannot say - a lengthless array's length is its content.">
+                                                            <TextBox.Style>
+                                                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsArray}" Value="False">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBox.Style>
+                                                        </TextBox>
+                                                    </Grid>
                                                 </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>

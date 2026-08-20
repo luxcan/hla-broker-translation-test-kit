@@ -852,6 +852,30 @@ namespace BrokerTestKit.Cli
             return map;
         }
 
+        /// <summary>
+        /// Collect repeated <c>--array Attr=N</c> flags. A dynamic array carries no length of its
+        /// own - RPR encodes these "without array length, containing only the elements" - so the
+        /// caller states how many the sheet should lay out.
+        /// </summary>
+        private static Dictionary<string, int> ParseArrays(string[] args)
+        {
+            var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 1; i + 1 < args.Length; i++)
+            {
+                if (args[i] != "--array") continue;
+                var pair = args[i + 1];
+                var eq = pair.IndexOf('=');
+                int n;
+                if (eq <= 0 || !int.TryParse(pair.Substring(eq + 1).Trim(),
+                                             System.Globalization.NumberStyles.Integer,
+                                             System.Globalization.CultureInfo.InvariantCulture,
+                                             out n) || n < 0)
+                    throw new FormatException("--array wants Attribute=COUNT, got '" + pair + "'");
+                map[pair.Substring(0, eq).Trim()] = n;
+            }
+            return map;
+        }
+
         /// <summary>Locate a native agent binary, walking up from the CLI's own directory.</summary>
         private static string FindNativeAgent(string exeName)
         {
@@ -1215,6 +1239,7 @@ namespace BrokerTestKit.Cli
                 if (a == "--skip-variable") { opt.SkipVariable = true; continue; }
                 if (a == "--rows" && i + 1 < args.Length) { opt.SampleRows = int.Parse(args[++i]); continue; }
                 if (a == "--variant" && i + 1 < args.Length) { i++; continue; }   // read by ParseVariants
+                if (a == "--array" && i + 1 < args.Length) { i++; continue; }     // read by ParseArrays
                 if (a == "--max" && i + 1 < args.Length) { opt.MaxColumns = int.Parse(args[++i]); continue; }
                 if (a == "--only" && i + 1 < args.Length)
                 {
@@ -1229,11 +1254,13 @@ namespace BrokerTestKit.Cli
             {
                 Console.Error.WriteLine(
                     "usage: template <fom.omt|fom.xml> <ClassOrInteraction> [out.csv] " +
-                    "[--expected] [--rows N] [--only a,b,c] [--skip-variable] [--max N]");
+                    "[--expected] [--rows N] [--only a,b,c] [--skip-variable] [--max N] " +
+                    "[--variant Attr=ENUMERATOR] [--array Attr=COUNT]");
                 return 2;
             }
 
             opt.Variants = ParseVariants(args);
+            opt.Arrays = ParseArrays(args);
 
             var fom = FomLoader.Load(Resolve(rest[0]));
             var target = rest[1];

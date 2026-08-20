@@ -94,6 +94,46 @@ namespace BrokerTestKit.Gui
             }
         }
 
+        /// <summary>
+        /// True when this member is a dynamic array whose elements CAN be laid out - fixed element
+        /// size and a publishable encoding. False for an ordinary member, and false for an array
+        /// the kit refuses to index (the reason then shows in Resolved).
+        /// </summary>
+        public bool IsArray { get; set; }
+
+        private string _elements = "";
+        /// <summary>
+        /// How many elements to lay out. Blank leaves the attribute as one hex value.
+        ///
+        /// Nothing in the FOM can supply this: RPR encodes these arrays "without array length,
+        /// containing only the elements", so the length IS the content and only the test author
+        /// knows how many the case needs.
+        /// </summary>
+        public string Elements
+        {
+            get { return _elements; }
+            set
+            {
+                _elements = value;
+                Raise("Elements"); Raise("HasElements");
+                var h = ChoiceChanged;
+                if (h != null) h(this);
+            }
+        }
+
+        /// <summary>The element count as a number, or 0 when unset or not a number.</summary>
+        public int ElementCount
+        {
+            get
+            {
+                int n;
+                return int.TryParse((_elements ?? "").Trim(), NumberStyles.Integer,
+                                    CultureInfo.InvariantCulture, out n) && n > 0 ? n : 0;
+            }
+        }
+
+        public bool HasElements { get { return IsArray && ElementCount > 0; } }
+
         /// <summary>Owner hook, so the Resolved column can answer for the new choice at once.</summary>
         public Action<MemberPick> ChoiceChanged;
     }

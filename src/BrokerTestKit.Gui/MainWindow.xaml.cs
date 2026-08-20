@@ -570,6 +570,7 @@ namespace BrokerTestKit.Gui
                     Name = n,
                     DataType = members[n],
                     Alternatives = AlternativesOf(model, members[n]),
+                    IsArray = IsLayoutableArray(model, members[n]),
                 };
                 if (pick.IsVariant) pick.Choice = MemberPick.NoVariant;   // before the hook: no re-entry
                 Describe(model, className, pick);
@@ -599,6 +600,27 @@ namespace BrokerTestKit.Gui
         }
 
         /// <summary>
+        /// Whether this member is an array whose elements the kit can actually lay out.
+        ///
+        /// Two things disqualify one, and both are honest refusals rather than gaps: an
+        /// HLAvariableArray carries a 4-byte element count this kit does not synthesise, and an
+        /// element type with no fixed size has no computable stride - RPR's
+        /// ArticulatedParameterStruct is the live example, because each element carries a variant
+        /// and DIS lets every element choose a different one.
+        /// </summary>
+        private static bool IsLayoutableArray(FomModel model, string dataType)
+        {
+            FomType t;
+            if (string.IsNullOrEmpty(dataType) || !model.Types.TryGetValue(dataType, out t) ||
+                t == null || t.Kind != FomKind.Array)
+                return false;
+
+            int elementSize;
+            string why;
+            return model.ArrayIndexable(t, out elementSize, out why);
+        }
+
+        /// <summary>
         /// Fill in the Resolved cell for one member, given the variant choice as it stands.
         ///
         /// An unanswered variant resolves to nothing, and the engine's error for that is a
@@ -610,19 +632,16 @@ namespace BrokerTestKit.Gui
         {
             if (pick.IsVariant)
             {
-                if (!pick.HasChoice) { pick.Resolved = "variant — pick one"; return; }
-                try
-                {
-                    var only = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    only[pick.Name] = pick.Choice;
-                    var cols = CsvTemplateGenerator.Columns(model, className, new CsvTemplateGenerator.Options
-                    {
-                        Include = new List<string> { pick.Name },
-                        Variants = only,
-                    });
-                    pick.Resolved = pick.Choice + " → " + cols.Count + " column(s)";
-                }
-                catch (Exception ex) { pick.Resolved = "(" + ex.Message + ")"; }
+                pick.Resolved = pick.HasChoice
+                    ? pick.Choice + " → " + Cost(model, className, pick)
+                    : "variant — pick one";
+                return;
+            }
+
+            if (pick.IsArray)
+            {
+                if (!pick.HasElements) { pick.Resolved = "array — how many elements?"; return; }
+                pick.Resolved = Cost(model, className, pick) + " for " + pick.ElementCount + " element(s)";
                 return;
             }
 
@@ -630,6 +649,19 @@ namespace BrokerTestKit.Gui
             var r = model.Resolve(className, pick.Name, out err);
             pick.Resolved = r == null ? "(" + err + ")"
                                       : r.CodecSpec + (r.Size >= 0 ? "  " + r.Size + "B" : "  var");
+        }
+
+        /// <summary>How many columns this member adds to the sheet, as the generator would count them.</summary>
+        private static string Cost(FomModel model, string className, MemberPick pick)
+        {
+            try
+            {
+                var opt = new CsvTemplateGenerator.Options { Include = new List<string> { pick.Name } };
+                if (pick.HasChoice) opt.Variants[pick.Name] = pick.Choice;
+                if (pick.HasElements) opt.Arrays[pick.Name] = pick.ElementCount;
+                return CsvTemplateGenerator.Columns(model, className, opt).Count + " column(s)";
+            }
+            catch (Exception ex) { return "(" + ex.Message + ")"; }
         }
 
         private void PickAll(object sender, RoutedEventArgs e) { foreach (var m in _members) m.Selected = true; }
@@ -649,7 +681,12 @@ namespace BrokerTestKit.Gui
             // --variant expanded it - the same FOM producing two different sheets depending on
             // which surface you used.
             var variants = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var m in _members) if (m.HasChoice) variants[m.Name] = m.Choice;
+            var arrays = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var m in _members)
+            {
+                if (m.HasChoice) variants[m.Name] = m.Choice;
+                if (m.HasElements) arrays[m.Name] = m.ElementCount;
+            }
 
             return new CsvTemplateGenerator.Options
             {
@@ -658,6 +695,7 @@ namespace BrokerTestKit.Gui
                 Include = include.Count > 0 ? include : null,
                 FloatTolerance = tol,
                 Variants = variants,
+                Arrays = arrays,
             };
         }
 

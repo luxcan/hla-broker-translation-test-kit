@@ -63,6 +63,13 @@ namespace BrokerTestKit.Engine
             /// </summary>
             public readonly Dictionary<string, string> Variants =
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            /// <summary>
+            /// Element counts from the `# array:` directive, e.g. PropulsionSystemsData -&gt; 2.
+            /// Recorded so the sheet is self-describing and regenerates identically; the column
+            /// names already carry their own indices, so resolution does not need it.
+            /// </summary>
+            public readonly Dictionary<string, int> Arrays =
+                new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             /// <summary>Per-column tolerance from the `# tolerance:` directive.</summary>
             public readonly Dictionary<string, double> Tolerances =
                 new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
@@ -101,6 +108,7 @@ namespace BrokerTestKit.Engine
                         Name = pathName,
                         Value = text,
                         DataType = SpecFor(fom, cls, pathName, path, r + 2, sheet),
+                        AttributeSize = AttributeSizeFor(fom, cls, pathName, sheet),
                     });
                 }
                 steps.Add(step);
@@ -174,15 +182,89 @@ namespace BrokerTestKit.Engine
                 : (reference.Offset == 0 ? "" : "@" + reference.Offset.ToString(CultureInfo.InvariantCulture));
 
             // An override changes only HOW the bytes are read, never WHERE they are: the offset
-            // still comes from the FOM, so a header typo cannot silently move the field.
+            // still comes from the FOM, so a header typo cannot silently move the field. It must
+            // not change HOW MANY either, and that is what used to leak away here.
             string kind;
             if (sheet != null && sheet.Overrides.TryGetValue(attributePath, out kind))
-                return kind + suffix;
+                return WithWidth(kind, reference.Size) + suffix;
 
             if (!dotted) return reference.CodecSpec;
 
             var spec = ValueCodec.ParseSpec(reference.CodecSpec);
-            return spec.Kind + (spec.Width >= 0 ? ":" + spec.Width.ToString(CultureInfo.InvariantCulture) : "") + suffix;
+            return WithWidth(spec.Kind, reference.Size) + suffix;
+        }
+
+        /// <summary>
+        /// Attach the FOM's byte width to a codec kind whose encoding depends on one.
+        ///
+        /// "string" pads to its width and does NOT pad at all without it; "hex" is sliced to its
+        /// width and otherwise runs to the end of the buffer. Numeric kinds carry their own size,
+        /// so stating one would be noise. An explicit width in the caller's own spelling wins.
+        ///
+        /// Both callers used to lose this. The override branch dropped the width outright, which
+        /// is exactly what the generated template produces: it tags every fixed-size opaque array
+        /// ":string" so a marking can be typed as text, and unpadded "TANK-01" then went on the
+        /// wire as 7 bytes against an 11-byte field. The compare sliced the full 11 back off and
+        /// failed with Expected and Actual BOTH reading TANK-01, because Decode trims trailing
+        /// NULs for display and Compare does not. The non-override branch took its width from
+        /// FieldRef.CodecSpec, which only states one for "string" - so a fixed-size hex sub-field
+        /// lost it the same way. FieldRef.Size is the authority for both.
+        /// </summary>
+        private static string WithWidth(string kind, int size)
+        {
+            var k = (kind ?? "").Trim();
+            if (k.Length == 0 || k.IndexOf(':') >= 0 || size <= 0) return k;
+
+            var bare = k.ToLowerInvariant();
+            if (bare != "string" && bare != "hex" && bare != "raw") return k;
+
+            return k + ":" + size.ToString(CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// Full wire size of the attribute a column addresses, or -1.
+        ///
+        /// Only meaningful for a DOTTED path: several columns then merge into one attribute value
+        /// and the runner has to know how big that value is, even where the sheet left fields
+        /// blank. A whole-attribute column already carries every byte it needs.
+        /// </summary>
+        private static int AttributeSizeFor(FomModel fom, string cls, string attributePath, Sheet sheet)
+        {
+            if (fom == null || string.IsNullOrEmpty(attributePath)) return -1;
+
+            var dot = attributePath.IndexOf('.');
+            if (dot <= 0) return -1;
+
+            // Same reason as ValueCodec.SplitPath: a subscript names an element of the attribute,
+            // not an attribute. A DYNAMIC array still answers -1 here, and rightly - its length is
+            // its content, so the columns the sheet actually fills decide how long it goes out.
+            var root = attributePath.Substring(0, dot);
+            var open = root.IndexOf('[');
+            if (open > 0 && root.EndsWith("]", StringComparison.Ordinal))
+                root = root.Substring(0, open);
+
+            // A dynamic array has no size in the FOM, so the sheet's own "# array:" count is the
+            // only authority - and it has to be N WHOLE elements. Left to the merge alone the
+            // value stops at the last field anyone filled, so a sheet that sets only
+            // VectoringNozzleSystemData[0].HorizontalDeflectionAngle would publish 4 bytes of an
+            // 8-byte element and the far side could not parse it as an element at all.
+            int declared;
+            if (sheet != null && sheet.Arrays.TryGetValue(root, out declared) && declared > 0)
+            {
+                var members = fom.FindClass(cls);
+                string typeName;
+                FomType arr;
+                if (members != null && members.TryGetValue(root, out typeName) &&
+                    fom.Types.TryGetValue(typeName, out arr) && arr.Kind == FomKind.Array)
+                {
+                    int elementSize;
+                    string why;
+                    if (fom.ArrayIndexable(arr, out elementSize, out why))
+                        return fom.ArrayCountPrefix(arr) + declared * elementSize;
+                }
+            }
+
+            return fom.AttributeWireSize(cls, root, sheet == null ? null : sheet.Variants);
         }
 
         private static double? ToleranceFor(Sheet sheet, string attributePath)
@@ -268,6 +350,22 @@ namespace BrokerTestKit.Engine
 
             if (key == "class") { sheet.ClassName = value; return; }
             if (key == "kind") { sheet.Kind = value; return; }
+
+            if (key == "array")
+            {
+                // "# array: PropulsionSystemsData=2, VectoringNozzleSystemData=1"
+                foreach (var part in value.Split(','))
+                {
+                    var p = part.Trim();
+                    var eq = p.IndexOf('=');
+                    if (eq <= 0) continue;
+                    int n;
+                    if (int.TryParse(p.Substring(eq + 1).Trim(), NumberStyles.Integer,
+                                     CultureInfo.InvariantCulture, out n) && n >= 0)
+                        sheet.Arrays[p.Substring(0, eq).Trim()] = n;
+                }
+                return;
+            }
 
             if (key == "variant")
             {

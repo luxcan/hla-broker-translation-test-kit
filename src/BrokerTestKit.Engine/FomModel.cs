@@ -31,6 +31,15 @@ namespace BrokerTestKit.Engine
         /// <summary>arrayData: element type + cardinality ("Dynamic" or a number).</summary>
         public string ElementType;
         public string Cardinality;
+        /// <summary>
+        /// The FDD's array encoding, e.g. RPRlengthlessArray, HLAvariableArray, HLAfixedArray.
+        ///
+        /// It decides where element 0 begins. RPR's "lengthless" arrays carry only the elements -
+        /// the FOM says so outright: "The array is encoded without array length". A standard
+        /// HLAvariableArray puts a 4-byte count first, so treating the two alike would shift every
+        /// element by four bytes and read each one straddling its neighbours.
+        /// </summary>
+        public string Encoding;
         public readonly List<FomField> Fields = new List<FomField>();
         /// <summary>Total byte size, or -1 when variable length.</summary>
         public int Size = -1;
@@ -240,16 +249,27 @@ namespace BrokerTestKit.Engine
             if (attrs == null) { error = "class '" + className + "' is not in " + Describe(); return null; }
 
             var parts = (attributePath ?? "").Split('.');
+
+            // A segment may carry an array subscript - "ArticulatedParametersArray[2]". Split the
+            // name from the index once, here, so the walk below never has to think about it again.
+            var names = new string[parts.Length];
+            var index = new int[parts.Length];
+            for (int i = 0; i < parts.Length; i++) SplitIndex(parts[i], out names[i], out index[i]);
+
             string typeName;
-            if (!attrs.TryGetValue(parts[0], out typeName))
+            if (!attrs.TryGetValue(names[0], out typeName))
             {
-                error = "attribute '" + parts[0] + "' is not defined on class '" + className +
+                error = "attribute '" + names[0] + "' is not defined on class '" + className +
                         "' in " + Describe();
                 return null;
             }
 
             int offset = 0;
             var typeOfCurrent = typeName;
+
+            if (index[0] >= 0 && !StepIntoElement(ref typeOfCurrent, ref offset, index[0],
+                                                  names[0], out error))
+                return null;
 
             for (int i = 1; i < parts.Length; i++)
             {
@@ -261,7 +281,7 @@ namespace BrokerTestKit.Engine
                     var reached = string.Join(".", parts, 0, i);
 
                     // The discriminant itself is an ordinary field at offset 0.
-                    if (string.Equals(parts[i], t.Discriminant, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(names[i], t.Discriminant, StringComparison.OrdinalIgnoreCase))
                     {
                         typeOfCurrent = t.DiscriminantType;
                         continue;
@@ -296,7 +316,7 @@ namespace BrokerTestKit.Engine
                     // "<path>.<enumerator>" names the alternative's payload as a whole. When the
                     // alternative carries a scalar rather than a record - RPR 2.0's
                     // RFModulationType=Amplitude is an enum - that is the only way to address it.
-                    if (string.Equals(parts[i], chosen, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (string.Equals(names[i], chosen, StringComparison.OrdinalIgnoreCase)) continue;
 
                     Types.TryGetValue(typeOfCurrent, out t);
                 }
@@ -310,14 +330,14 @@ namespace BrokerTestKit.Engine
 
                 FomField field = null;
                 foreach (var f in t.Fields)
-                    if (string.Equals(f.Name, parts[i], StringComparison.OrdinalIgnoreCase)) { field = f; break; }
+                    if (string.Equals(f.Name, names[i], StringComparison.OrdinalIgnoreCase)) { field = f; break; }
 
                 if (field == null)
                 {
-                    var names = new List<string>();
-                    foreach (var f in t.Fields) names.Add(f.Name);
+                    var available = new List<string>();
+                    foreach (var f in t.Fields) available.Add(f.Name);
                     error = "type " + typeOfCurrent + " has no field '" + parts[i] +
-                            "'. Available: " + string.Join(", ", names.ToArray());
+                            "'. Available: " + string.Join(", ", available.ToArray());
                     return null;
                 }
                 if (field.Offset < 0)
@@ -328,6 +348,10 @@ namespace BrokerTestKit.Engine
                 }
                 offset += field.Offset;
                 typeOfCurrent = field.DataType;
+
+                if (index[i] >= 0 && !StepIntoElement(ref typeOfCurrent, ref offset, index[i],
+                                                      string.Join(".", parts, 0, i + 1), out error))
+                    return null;
             }
 
             var reference = new FieldRef
@@ -353,6 +377,97 @@ namespace BrokerTestKit.Engine
         {
             string ignored;
             return Resolve(className, attributePath, variants, out ignored);
+        }
+
+        /// <summary>
+        /// Byte size of a WHOLE attribute as it goes on the wire, or -1 when the FOM cannot fix
+        /// one (a variable-length array, or a variant with no alternative named).
+        ///
+        /// <see cref="Resolve"/> answers for a FIELD; this answers for the attribute that contains
+        /// it, which is what a publisher needs when a sheet fills only some of its sub-fields. A
+        /// variant record has no size until an alternative is chosen, so the sheet's choices are
+        /// part of the question - which is why this takes them.
+        /// </summary>
+        public int AttributeWireSize(string className, string attribute,
+                                     IDictionary<string, string> variants)
+        {
+            var members = FindClass(className);
+            if (members == null || string.IsNullOrEmpty(attribute)) return -1;
+
+            string typeName;
+            if (!members.TryGetValue(attribute, out typeName)) return -1;
+
+            FomType t;
+            if (Types.TryGetValue(typeName, out t) && t != null && t.Kind == FomKind.Variant)
+            {
+                var chosen = Chosen(variants, attribute);
+                string alternative;
+                if (string.IsNullOrEmpty(chosen) ||
+                    !t.Alternatives.TryGetValue(chosen, out alternative)) return -1;
+
+                var payload = SizeOf(alternative);
+                return payload < 0 ? -1 : VariantPayloadOffset(t) + payload;
+            }
+
+            return SizeOf(typeName);
+        }
+
+        /// <summary>
+        /// Split "Name[3]" into its name and index. Index is -1 when the segment carries none,
+        /// which is every ordinary field.
+        /// </summary>
+        private static void SplitIndex(string segment, out string name, out int index)
+        {
+            name = segment ?? "";
+            index = -1;
+
+            var open = name.IndexOf('[');
+            if (open <= 0 || !name.EndsWith("]", StringComparison.Ordinal)) return;
+
+            int n;
+            var inner = name.Substring(open + 1, name.Length - open - 2);
+            if (!int.TryParse(inner, NumberStyles.Integer, CultureInfo.InvariantCulture, out n) || n < 0)
+                return;                                    // "[x]" is not an index; leave it alone
+
+            name = name.Substring(0, open);
+            index = n;
+        }
+
+        /// <summary>
+        /// Move the walk from an array to one of its elements, advancing the offset past the
+        /// element count (where the encoding has one) and the elements before it.
+        /// </summary>
+        private bool StepIntoElement(ref string typeOfCurrent, ref int offset, int index,
+                                     string reached, out string error)
+        {
+            error = null;
+
+            FomType array;
+            if (!Types.TryGetValue(typeOfCurrent, out array) || array.Kind != FomKind.Array)
+            {
+                error = "'" + reached + "' is of type " + typeOfCurrent +
+                        ", which is not an array, so it cannot be indexed";
+                return false;
+            }
+
+            int elementSize;
+            string why;
+            if (!ArrayIndexable(array, out elementSize, out why)) { error = why; return false; }
+
+            // A fixed-cardinality array states how many it holds; a dynamic one does not, and the
+            // sheet's own columns decide - so only the fixed case can be range-checked here.
+            int cardinality;
+            if (int.TryParse(array.Cardinality, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                             out cardinality) && index >= cardinality)
+            {
+                error = "'" + reached + "' holds " + cardinality + " element(s), so [" + index +
+                        "] is out of range";
+                return false;
+            }
+
+            offset += ArrayCountPrefix(array) + index * elementSize;
+            typeOfCurrent = array.ElementType;
+            return true;
         }
 
         /// <summary>The alternative chosen for this path, or null.</summary>
@@ -491,6 +606,55 @@ namespace BrokerTestKit.Engine
         {
             if (variant == null) return 0;
             return Pad(SizeOf(variant.DiscriminantType), AlignmentOf(variant.Name));
+        }
+
+        /// <summary>
+        /// Bytes that sit BEFORE element 0 of an array - the element count, where the encoding
+        /// carries one.
+        ///
+        /// RPR's lengthless arrays carry no count at all, which is what makes them indexable from
+        /// a sheet: element i is simply at i * elementSize. A standard HLAvariableArray prefixes a
+        /// 4-byte count, and <see cref="ArrayIndexable"/> refuses those rather than quietly
+        /// writing elements the far side would mis-read for want of that count.
+        /// </summary>
+        public int ArrayCountPrefix(FomType array)
+        {
+            if (array == null) return 0;
+            return string.Equals(array.Encoding, "HLAvariableArray",
+                                 StringComparison.OrdinalIgnoreCase) ? 4 : 0;
+        }
+
+        /// <summary>
+        /// Whether a sheet may address this array element by element, and why not when it may not.
+        ///
+        /// Indexing needs two things: a fixed element size, so element i has a computable offset,
+        /// and an encoding this kit can actually PUBLISH. HLAvariableArray fails the second -
+        /// writing its elements without synthesising the 4-byte count would put a value on the
+        /// wire that decodes to nothing sensible, so it is refused out loud instead.
+        /// </summary>
+        public bool ArrayIndexable(FomType array, out int elementSize, out string why)
+        {
+            elementSize = -1;
+            why = null;
+
+            if (array == null || array.Kind != FomKind.Array) { why = "not an array"; return false; }
+
+            if (string.Equals(array.Encoding, "HLAvariableArray", StringComparison.OrdinalIgnoreCase))
+            {
+                why = "'" + array.Name + "' is an HLAvariableArray - its 4-byte element count is " +
+                      "part of the value and this kit does not synthesise it yet, so it stays hex";
+                return false;
+            }
+
+            elementSize = SizeOf(array.ElementType);
+            if (elementSize <= 0)
+            {
+                why = "element type '" + array.ElementType + "' of '" + array.Name +
+                      "' has no fixed size, so element offsets cannot be computed";
+                elementSize = -1;
+                return false;
+            }
+            return true;
         }
 
         /// <summary>Round an offset up to the next multiple of <paramref name="align"/>.</summary>

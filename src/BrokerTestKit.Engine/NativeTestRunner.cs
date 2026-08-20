@@ -292,7 +292,15 @@ namespace BrokerTestKit.Engine
 
                 byte[] buf;
                 buffers.TryGetValue(attr, out buf);
-                var needed = Math.Max(spec.Offset + bytes.Length, ValueCodec.KnownStructSize(attr));
+
+                // The FOM's size for the whole attribute wins. KnownStructSize is a four-struct
+                // stopgap that answers -1 for everything else - EntityType, Marking and Spatial
+                // included - and that is how a partly-filled struct used to go on the wire
+                // truncated to its last written field, silently. It stays only as the fallback
+                // for sheets published without a FOM (the `native` mode path).
+                var whole = cell.AttributeSize > 0 ? cell.AttributeSize
+                                                   : ValueCodec.KnownStructSize(attr);
+                var needed = Math.Max(spec.Offset + bytes.Length, whole);
                 if (buf == null || buf.Length < needed)
                 {
                     var grown = new byte[Math.Max(needed, buf == null ? 0 : buf.Length)];
