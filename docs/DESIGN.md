@@ -117,7 +117,7 @@ broker's source so it tests the real runtime behaviour.
 "one app, two HLA versions" (Federate A on 1.3, Federate B on Evolved) and the
 same publish/reflect patterns the broker itself uses.
 
-**CONFIRMED (2026-06-29, local install `C:\MAK\vrlink5.9`):** VR-Link 5.9 ships a
+**CONFIRMED (2026-06-29, local install `C:\MAK\vrlink5.9`, since replaced by 5.10 / 5.9.1):** VR-Link 5.9 ships a
 C# binding (`C-Sharp/`, `bin64/managedInterface*HLA13/HLA1516/HLA1516e.dll`) **and a
 generic/universal HLA layer** that gives FOM-agnostic, raw access in pure C# — no
 C++/CLI shim needed. Key classes (see `doc/reference/csharp`):
@@ -337,34 +337,39 @@ interaction within X. Objects are the hard part.
 - ~~Q3 — C# raw/generic HLA access~~ — **CONFIRMED** present in VR-Link 5.9 C# (§4).
 - ~~VR-Link C# licensing~~ — **confirmed available** (covers federation + hours) (§4).
 
-Remaining:
-0. **OPEN — do Fed A & Fed B share ONE RTI version?** (decides harness topology).
-   **CONFIRMED from VR-Exchange Users Guide** (§1.1 p1-2, §1.1.3 p1-5, §4.1.2 p4-4):
-   VR-Exchange is a shared-memory **Portal + one broker *program* (process) per
-   connection**; *"translation takes place in the brokers, which are separate programs"*;
-   *"each broker is configured to use different RTIs"* via **per-connection env vars**
-   (*"to have different HLA connections use different RTIs"*); *"Portal and all brokers must
-   run on the same computer."* So one VR-Exchange spans different RTIs by **separate
-   processes + shared memory on one box** — NOT one process.
-   → Harness consequence: a **single** C# process (two `ExerciseConnection`s) only works if
-   both federations are on the **same RTI version**. If on **different RTI versions** (like the
-   broker's 3.3.2↔4.3), the harness must be **multi-process** (one federate process per RTI,
-   IPC-bridged on one machine), mirroring VR-Exchange. Resolve before committing topology.
-1. **The byte[] codec** — the main build effort. Datatype-driven encode/decode.
-   Now bounded: both sides are **standard RPR FOMs** (1.0 / 2.0), so datatypes come
-   from the **SISO RPR-FOM enc tables** + IEEE 1516.2 — no hand-authored 1.3 map needed.
-   Fed B datatypes are also in `RPR_FOM_v2.0_1516-2010.xml` (self-describing).
-2. Prototype, built incrementally:
-   - **PRP-1 — join + resign Federation A (HLA 1.3).** ✅ scaffolded
-     (`src/BrokerTestKit.Cli`, net462/x64); **compiles against `vrLinkSharp.dll`**.
-     ❓ awaiting a licensed VR-Link + RTI env + real Fed A `.fed`/name to *run*.
-   - PRP-2 — join both (1.3 + Evolved) in one process.
-   - PRP-3 — loopback: publish + receive one `UniversalHlaObjStateMessage` (first codec byte).
-   - PRP-4 — through the broker with the §9.1 wait-or-timeout loop; measure latency to tune X.
-3. (Optional) Skim `examples/modRprBroker` + `brokers/rprBroker` to characterise the
-   broker, for richer test fixtures — not required to start.
+Resolved since this list was written (2026-11-02):
+- ~~0 — do Fed A & Fed B share one RTI?~~ — **No, and it does not matter.** The harness is
+  multi-process exactly as predicted: one native agent per federation, each with its own RTI
+  `bin`, rid and `RTI_ASSISTANT_PORT`, held together by a bridge profile. Proven across RTI 4.5.1
+  (vc14) ↔ 5.0.1 through VR-Exchange 2.9 — mak-rti-knowledge.md §9.
+- ~~1 — the byte[] codec~~ — **done, FOM-driven.** Datatypes, offsets, alignment padding,
+  variant records (`--variant`) and dynamic arrays (`--array`) all come from the parsed
+  `.omt` / FDD. The CSV never states a type.
+- ~~2 — PRP-1…4~~ — **done.** Both federations, loopback, and through the broker with
+  wait-or-timeout and measured latency.
+
+Open:
+- **Linked objects (parked 2026-11-02 — 1:1 testing first).** RPR links an aircraft to its
+  emitters by REFERENCE, not containment: `EmbeddedSystem.HostObjectIdentifier` and
+  `EmitterBeam.EmitterSystemIdentifier` are `RTIobjectId` — an RTI object-instance NAME. The kit
+  today runs one class per run and has no reference value type. The trap for when this is
+  built: VR-Exchange re-registers every object on federation B under its OWN names, so the
+  correct check is "B's emitter points at B's copy of the aircraft", never a string compare of
+  what A sent. Needs multi-class runs (host registered first), a reference column type (e.g.
+  `@1:1:1` = "the instance of row 1:1:1"), and resolution on both sides before comparing.
+- **Late join** — measured, see mak-rti-knowledge.md §10. Open there: the federation-B result
+  assumes a passive consumer (neither agent calls `requestAttributeValueUpdate`).
+- **Delete / remove** (§9 scope) — the agents implement `DELETE` and the removal callback, but no
+  CSV syntax or runner step drives it.
+- **Run history** — `Store.BeginRun/SaveStep/EndRun` exist with no callers; the GUI keeps nothing
+  after it closes.
+- **Fresh clone** — licensed inputs are gitignored by design; the copy-in steps are not written
+  down yet.
 
 ## 11. Source references (in `C:\MAK\vrexchange2.5.1`)
+
+> ⚠️ 2.5.1 is the x86 / VC10 install, a dead end for running anything (see CLAUDE.md). These paths
+> are for reading example source only; the broker under test is VR-Exchange **2.9**.
 
 - `examples/simpleBroker/` — minimal DIS↔Portal entity/fire translators (typed path).
 - `examples/brokerPlugin/` — plugin extending disBroker; `modDataInterTrans` shows

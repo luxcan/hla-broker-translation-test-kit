@@ -1,5 +1,8 @@
 # VR-Link 5.9 Knowledge Base
 
+> ⚠️ `C:\MAK\vrlink5.9` no longer exists. The harness now runs on **5.10** (`MakEnvironment.cs`)
+> and 5.9.1 is also installed. The facts below were confirmed against 5.9.
+>
 > Distilled from the MAK VR-Link 5.9 docs under `C:\MAK\vrlink5.9\doc` (scanned
 > 2026-06-29), focused on what's needed to build the C# HLA test harness in this repo.
 > See [DESIGN.md](DESIGN.md) for how this is applied. Cross-referenced from `CLAUDE.md`.

@@ -12,7 +12,9 @@ what Federation B receives against an output CSV (golden-file black-box testing)
 
 Status: **working prototype.** Join, multi-process agents, IPC and the CSV golden-file
 runner all work end-to-end against MAK RTI 5.0.1 (see `docs/APP-REQUIREMENTS.md` for status
-per requirement). Not yet under git — see the version-control note below.
+per requirement). Under git: `github.com:luxcan/hla-unit-test-kit`, private. Commit straight to
+`main`. MAK licensed files (rids, FOMs, `vrLinkSharp.dll`) are gitignored, so a fresh clone needs
+them copied in before it builds or runs.
 
 ## Key references — read these first
 
@@ -31,22 +33,23 @@ per requirement). Not yet under git — see the version-control note below.
 - **[docs/vr-link-knowledge.md](docs/vr-link-knowledge.md)** — distilled VR-Link API
   knowledge (C# binding, the Universal HLA generic layer, joining federations, encoding,
   time management, HLA 1.3 vs Evolved). **Consult this for any VR-Link API question** instead
-  of re-scanning `C:\MAK\vrlink5.9\doc`. Keep it updated as new facts are confirmed.
+  of re-scanning `C:\MAK\vrlink5.10\doc`. Keep it updated as new facts are confirmed.
 
 ## Stack / environment facts
 
 - Vendor: **MAK**. RTI = MAK RTI. Broker = **VR-Exchange 2.9** (`C:\MAK\vrexchange2.9`) — x64,
   built **VC14**, `bin64` only. ⚠️ `vrexchange2.5.1` is also installed but is **x86 / VC10** and a
   dead end: it cannot load any VC14+ RTI. Always check which one you are looking at.
-- Harness language = **C# on VR-Link 5.9** (`C:\MAK\vrlink5.9`; ref `vrLinkSharp.dll`,
+- Harness language = **C# on VR-Link 5.10** (`C:\MAK\vrlink5.10`, set in `MakEnvironment.cs`;
+  5.9.1 is also installed, 5.9 is not; ref `vrLinkSharp.dll`,
   namespace `makVrl`). The C# binding selects HLA version at **runtime**, so one process
   holds both the 1.3 and the Evolved connection.
 - Harness API of choice = the **Universal HLA layer** (`UniversalHlaObjStateMessage` /
   `…ObjDiscoveryMessage` / `…ObjRemovedMessage` / `UniversalHlaInteractionMessage` +
   `ExerciseConnection.addMessageHandler`/`sendMessage`) — FOM-agnostic, by-name, raw `byte[]`.
 - The harness is **independent** of the C++ broker (tests it as a black box).
-- **GUI = `src/BrokerTestKit.Gui`** (WPF, 4 tabs: Federations / FOM->CSV template / Test data /
-  Run). It holds no RTI connection - the agents are child processes. The CLI stays the CI entry
+- **GUI = `src/BrokerTestKit.Gui`** (WPF, 5 tabs: FOM registry / Connections / CSV template /
+  Test data / Run). It holds no RTI connection - the agents are child processes. The CLI stays the CI entry
   point (`entity`, `native`, `template`, `fom` modes).
 - **Custom attributes require the NATIVE agents**, not C#. The C# VR-Link binding has no FOM
   Mapper/encoder, so unmodelled attributes never reach the wire. `src/BrokerTestKit.AgentNative/`
@@ -75,15 +78,25 @@ per requirement). Not yet under git — see the version-control note below.
 - **Variant records expand on request** — `template … --variant Spatial=DRM_FPW` writes a
   `# variant:` directive and turns RPR 2.0's `Spatial` from one hex blob into eleven values at the
   offsets the FOM implies. Opt-in: name nothing and the column stays hex, so old sheets still pass.
-  Only variable-length arrays now need hand-encoded bytes.
+  Dynamic arrays expand the same way with `--array Attr=N` (GUI: the "Variant / elements"
+  column). Still hex by design: `HLAvariableArray` (its count prefix is not synthesised), arrays
+  whose element holds a variant (`ArticulatedParametersArray`), and `HLAopaqueData`. Arrays are
+  verified on an RPR 2.0 → 2.0 loopback over RTI 5.0.1, **not across the broker**: stock RPR 1.0
+  `GroundVehicle` has no `PropulsionSystemsData` / `VectoringNozzleSystemData`, so there is
+  nothing on side A to publish.
 - ⚠️ **The broker normalises Euler angles.** Keep generated `Orientation` inside ±π (psi, phi) and
   ±π/2 (theta) or the golden file fails on correct broker behaviour — see §9.
+- ⚠️ **If vrx never opens TCP 5111, check the licence first.** vrx stalls silently at `Locking
+  Mutex: VRX-…` when the MAK vendor daemon is down, even though `lmgrd` is up and port 27000
+  answers. `C:\MAK\MAKLicenseManager\lmutil.exe lmstat -c 27000@127.0.0.1` must show
+  `maklmgrd: UP`; if not, `lmutil lmreread -c 27000@127.0.0.1` (needed after plugging in the
+  FLEXID dongle). See §9.
 
 ## Conventions
 
 - Keep `docs/DESIGN.md` and `docs/vr-link-knowledge.md` in sync with new findings; mark
   facts ✅ confirmed / ⚠️ caveat / ❓ to-verify as in vr-link-knowledge.md.
-- Do **not** re-read `C:\MAK\vrlink5.9\doc\AddingContent.pdf` — it's a 3D-art/terrain manual,
+- Do **not** re-read `AddingContent.pdf` (in any `C:\MAK\vrlink*\doc`) — it's a 3D-art/terrain manual,
   irrelevant to this project (64 MB).
 - VR-Link developer detail lives in the **HTML reference** (`doc/reference/csharp/`,
   `doc/reference/hla1516e/`), not in the PDFs (the Getting Started PDF is concepts-only).

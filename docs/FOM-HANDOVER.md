@@ -147,12 +147,21 @@ Transform vocabulary the harness understands today:
 ## What happens when these land
 
 Nothing in the harness needs rebuilding. The FOM files are configuration, attribute names come
-from the CSV, and datatypes come from the CSV's `datatype` column (REQ-09). Concretely:
+from the CSV header, and datatypes and offsets come from the **FOM itself** (REQ-09) — the CSV has
+no datatype column. Concretely:
 
 1. drop the files into `config/`
-2. point the two side configs at them (exec names, FOM files, class names)
-3. write the golden CSVs from the mapping table
-4. run `BrokerTestKit.Cli.exe native input.csv output.csv` — no `--selftest`
+2. copy `config/bridge-stock-rpr.profile` to a new `.profile` and point each side at them: the
+   `fedFile` / `fom`, the Evolved side's `joinFom` modules (they must match what the broker joins
+   with, or federation B receives nothing, silently — see mak-rti-knowledge.md §9), and `class`
+3. generate the CSV templates from the FOMs (GUI: CSV template tab; CLI: `template`), naming any
+   `--variant` / `--array` choices, and fill them in from the mapping table
+4. run `BrokerTestKit.Cli.exe entity input.csv expected.csv --profile <your.profile>`, or import
+   the profile on the GUI's Connections tab and use the Run tab
 
-Until then the kit is exercised against the samples above in loopback, which proves the rig but
-**not** the broker. That distinction is deliberate and worth keeping in mind when reading results.
+Do **not** use the CLI's `native` mode for this: it predates profiles and hard-codes federation
+names, FOM files and the class, so it cannot pick an RTI, rid or join modules.
+
+The stock-RPR profile already proves the rig **through the broker**
+(`tests/native/run-bridge.ps1`). What it cannot prove is your customisations — that needs the
+files above.

@@ -545,29 +545,66 @@ lost or mismatched.
 The portal's `maxObjectViewCount` (5000 by default, in `VR-Exchange.xml`) is the first ceiling
 worth raising for a larger run.
 
-### Bridge latency: ~43 ms, and it does not care how loaded the bridge is ✅
+### Bridge latency: ~29 ms, tight, and flat across 500 objects ✅
 
 Send to receive — update handed to federation A, matching state observed on federation B — over
-500 entities:
+500 entities, re-measured 2026-11-02 (CLI `entity --profile bridge-stock-rpr.profile --quiet`):
 
 ```
-broker latency over 500 step(s):  min 16.6ms  mean 42.9ms  p50 47.5ms  p95 51.8ms  max 55.2ms
+500 step(s): 500 passed, 0 failed, 0 timed out  in 360.4s
+broker latency over 500 step(s):  min 13.6ms  mean 28.7ms  p50 28.6ms  p95 30.2ms  max 39.9ms
+p5 27.3 ms   stdev 1.5 ms
 ```
 
-Two things worth reading off that:
-
-- **It does not drift.** Bucketed 50 rows at a time the mean runs 42.3, 43.3, 44.8, 43.0, 44.2,
-  41.1, 49.0, 38.5, 39.8, 42.8 ms. Five hundred live objects later the bridge is as quick as it
+- **It does not drift.** Bucketed 50 rows at a time the mean runs 28.7, 28.6, 28.7, 28.6, 28.7,
+  28.0, 29.1, 28.7, 28.8, 29.2 ms. Five hundred live objects later the bridge is as quick as it
   was on the first row, which matches the 4000-row result above.
-- **The spread is the shape of a POLL, not a queue.** Values sit roughly uniformly between ~17 ms
-  and ~55 ms — a ~38 ms window — rather than clustering with a long tail. That is what a fixed
-  broker tick looks like: how long a message waits depends on where in the tick it arrives, not on
-  how much work is outstanding. `pollingInterval` in the `.bcf` is the knob to try if this matters.
+- **It is tight.** 90 % of rows land inside a 3 ms window.
 
-The number is an **upper bound** on the broker: it is measured from outside, so agent A's own
-dispatch is inside it. It is a small bound — the reflect on B routinely arrives before agent A has
-finished printing its own `OK UPDATE`, which is what made an earlier attempt to measure from the
-acknowledgement report a flat 0 ms.
+⚠️ **Correction.** This section used to report ~43 ms (min 16.6, p95 51.8) with values spread
+roughly uniformly over a ~38 ms window, and read that spread as "the shape of a fixed broker
+tick". Neither held up: the same 500-row run on the same rig now gives the tight distribution
+above. The earlier figures are withdrawn rather than explained — one known contributor was the
+harness measuring itself (the GUI's transcript handler blocked the thread that stamps arrival
+times; fixed in `47f98ef`), but the August number was a CLI run, so that does not fully account
+for it. Do not quote 43 ms.
+
+❓ **The CLI and the GUI disagree by ~10 ms.** For 12 identical rows the GUI (after that fix)
+read mean 18.6 ms; the CLI reads 28.7 ms. Both stamp in the same engine code, so the difference
+is in the host process, not the broker. Treat **~29 ms as an upper bound** on what VR-Exchange
+costs, measured from outside — agent A's own dispatch is inside it. It is a small bound: the
+reflect on B routinely arrives before agent A has finished printing its own `OK UPDATE`, which
+is what made an earlier attempt to measure from the acknowledgement report a flat 0 ms.
+
+### If vrx never opens its portal socket, check the licence first ⚠️
+
+Symptom: `vrx` prints `Locking Mutex: VRX-<queue names>` and then nothing; TCP 5111 never
+listens; both broker logs stay empty; brokers started on their own die with *"Broker TCP Socket
+didn't connect in time"*. Killing every MAK process and restarting changes nothing.
+
+Cause (confirmed 2026-11-02): the **MAK vendor daemon is down**. `lmgrd` can be up and port
+27000 can answer while no MAK product can check out a licence:
+
+```
+C:\MAK\MAKLicenseManager\lmutil.exe lmstat -c 27000@127.0.0.1
+  127.0.0.1: license server UP v11.14.1
+  maklmgrd: The desired vendor daemon is down. (-97,121)      <- this line
+```
+
+Fix: `lmutil lmreread -c 27000@127.0.0.1` (needed after plugging in the FLEXID dongle), then
+start vrx again. Two traps on the way:
+- Launch vrx so it **inherits** the machine-level `MAKLMGRD_LICENSE_FILE` (`27000@localhost`).
+  `cmd /c "set MAKLMGRD_LICENSE_FILE=… && vrx …"` puts the space before `&&` into the value, and
+  vrx then exits with *"cannot find the FlexLM License Server"*.
+- With the daemon up, a portal stuck at the mutex line has been seen to hang rather than exit;
+  the licence was still the cause. An earlier diagnosis in this project blamed a stale shared-
+  memory mutex — that was wrong.
+
+### Blanket timeouts on a rig that used to pass: restart vrx ⚠️
+
+If every row times out — **including a control sheet that passed minutes earlier** — the rig has
+gone stale, not the code. Restart VR-Exchange (both brokers respawn) and re-run before changing
+anything. The giveaway is the control: a real regression leaves it passing.
 
 ### A dead broker does not fail the run by itself ⚠️
 
