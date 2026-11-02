@@ -579,3 +579,222 @@ something that was obvious after the third row.
 
 `--abort-after N` stops the run after N consecutive timeouts. Off by default, because on a test
 whose whole point is negative cases a run of timeouts can be the correct answer.
+
+---
+
+## 10. Late join drops static attributes, and `HLAautoProvide` fixes it ✅
+
+Measured end to end on this machine, 2026-09-28, with `tests/native/run-latejoin.ps1`.
+
+**The problem.** A CGF publishes every attribute once at registration and then sends only what
+changes — normal, correct HLA. `EntityType`, `EntityIdentifier` and `Marking` never move, so they
+cross the wire exactly once. Any federate that joins after that moment gets `discoverObjectInstance`
+but **no values**, and the RTI stores none to replay. It then receives only the delta stream.
+
+Two places this bites in an A → VR-Exchange → B bridge, needing different fixes:
+
+| late joiner | loss is | owner that must answer a provide request |
+|---|---|---|
+| the VR-Exchange broker, on federation A | upstream, inside the broker's state repository | the CGF |
+| a federate on federation B | downstream of the broker | **VR-Exchange itself** (VR-Link answers) |
+
+**Measured, federation B (`-Scenario SubscriberLate`).** Publisher sends one `attrs=8` update then
+17 position-only ones; the broker republishes on B; our federate joins ~25 s later.
+
+| | attributes received on B over 90 s |
+|---|---|
+| baseline | `Spatial` ×22 — and **nothing else**. No `EntityType`, `EntityIdentifier` or `Marking`. |
+| `HLAautoProvide` on | `EntityType` ×6, `EntityIdentifier` ×6, `Marking` ×6, `Spatial` ×23 |
+
+With the switch on, all three static attributes arrive **in the first reflection after `DISC`** —
+the RTI invokes Provide Attribute Value Update on VR-Exchange the moment the late federate
+subscribes, and VR-Link answers with full state. `EntityType` is `010100e101010000`, byte-for-byte
+what federation A published.
+
+Note the symptom is **all** the static attributes, not just the type. They shared one update.
+
+### 🚨 `RTI_autoProvideSwitch` alone does nothing
+
+The switch is federation-wide, **set at create time by whoever creates the execution**, and the FDD
+wins by default:
+
+```
+(setqb RTI_preferRidToFedSwitchTable 1)   ;; MANDATORY - without it the next line is ignored
+(setqb RTI_autoProvideSwitch 1)
+```
+
+`config/RPR_FOM_v2.0_1516-2010.xml:5769` carries `<autoProvide isEnabled="false"/>`, and with
+`RTI_preferRidToFedSwitchTable 0` that is what is in force no matter what the RID says. The two
+installs disagree on this flag out of the box — 4.5.1 ships `1`, 5.0.1 ships `0` — so the same RID
+edit behaves differently per federation.
+
+⚠️ `preferRidToFedSwitchTable 1` hands the RTI the **whole** switch table from the RID, not just
+autoProvide. `config/rid-fedB-rti501-autoprovide.mtl` therefore restates all nine of the FDD's
+switches at their existing values so autoProvide is genuinely the only variable. Copy that pattern;
+setting the one line changes several things at once.
+
+Because the FedB broker creates the execution, its RID had to change too —
+`bin64\BTK-Bridge-autoprovide.xml` differs from `BTK-Bridge.xml` by exactly one line.
+
+### The upstream path: VR-Exchange asks for itself ✅
+
+`-Scenario BrokerLate` — the federation-A broker joins ~10 s after the CGF's one full update
+(ordering verified by event, not by sleep: the first position it forwards is P2, not the base).
+
+VR-Exchange's HLA 1.3 broker does **not** sit and wait. On discovering an object it has no
+values for it issues `requestClassAttributeValueUpdate`, which the RTI turns into
+`provideAttributeValueUpdate` on the owner. Whether the type crosses then depends entirely on
+whether the owner answers:
+
+| CGF answers provide requests? | `HLAautoProvide` | provide reqs / answered | `EntityType` on B |
+|---|---|---|---|
+| yes | off | 3 / 3 | **arrives** ✅ |
+| no  | off | 10 / 0 | absent ❌ |
+| no  | **on** | 10 / 0 | **still absent** ❌ |
+
+Two things follow, and the second is the one that will waste someone's week:
+
+1. **The upstream path self-heals with no RTI configuration at all**, provided the CGF answers.
+   That is the first thing to check in production: does the CGF implement
+   `provideAttributeValueUpdate`? HLA requires it; implementations vary.
+2. 🚨 **`HLAautoProvide` cannot rescue an owner that does not answer.** The switch works *by*
+   invoking `provideAttributeValueUpdate` on the owner — a silent owner defeats it completely.
+   Anyone who reaches for the RTI switch first will see no change and conclude it is broken.
+
+**Diagnostic signature:** repeated provide requests in the publisher's transcript with no
+answer. The broker retried 10 times against a silent owner versus 3 when answered, so a rising
+`PROVIDEREQ` count with no `OK PROVIDE` is the upstream failure, visible without a debugger.
+
+`btk-agent13` now implements the callback (default on, `--no-provide` to model a
+non-compliant CGF). Three non-obvious requirements, each of which silently breaks it:
+queue the request rather than answering inside the callback (re-entrant `tick()` →
+`ConcurrentAccessAttempted`, `RTIambServices.hh:346`); service the queue in `cmdWait`'s tick
+loop as well as `main`'s, since scripts spend nearly all their time inside `WAIT`; and **merge**
+into `lastSent` rather than assigning, or after the first delta it holds `WorldLocation` alone
+and the response omits the type.
+
+### The two failure modes look completely different from the far side 🚨
+
+Measured with ONE RTI (MAK RTI 5.0.1) hosting both federations — it ships `libRTI-NG_64.dll`
+and `librti1516e64.dll`, so the split-RTI topology is not required. Every result below
+reproduces what the 4.5.1-on-A topology gave, so none of it was a cross-version artifact.
+
+| run | entity on B | `EntityType` | verdict |
+|---|---|---|---|
+| Control | present, moving | correct | PASS |
+| SubscriberLate | present, moving | **absent** | REPRODUCED |
+| SubscriberLate + autoProvide | present, moving | correct | FIXED |
+| BrokerLate, CGF silent | **never appears** | absent | REPRODUCED (suppressed) |
+
+**This is a free production diagnostic — the symptom says which end is broken:**
+
+- **Entity appears and moves but has no identity** → the loss is DOWNSTREAM. The consumer on B
+  joined after the broker's one full update. Fix on federation B.
+- **Entity never appears at all** → the loss is UPSTREAM. The broker joined after the CGF's full
+  update and the CGF did not answer its request, so the broker never had a type to publish, and
+  `publicationCriteria/entity/entityType=true` withholds the whole object. Fix at the CGF.
+
+**The suppression is caused by the missing type specifically**, proved by single-variable
+isolation: with `latejoin-pub-fedA-isolate.txt` the deltas re-send `EntityIdentifier` and
+`WorldLocation`, so `EntityType` is the only unmet criterion — the broker then *does* discover
+the entity on A (`Discovered Entity ... GroundVehicle(25)`) and still refuses to register it on
+B. Six snapshots, `objects=0`.
+
+Retry counts differ usefully between the two: 10 provide requests when the broker cannot form
+the object at all, 3 when it has id and location but no type.
+
+### Four fixes, measured 🚨
+
+| fix | where it lives | scope | verdict |
+|---|---|---|---|
+| **Broker `<heartbeat>`** | FedB `.bcf` | **one place, every consumer** | ✅ best |
+| `autoProvide` | the CONSUMER's rid | per consumer, unilateral | ✅ works |
+| Disable/enable the FedB connection | operator action | one-off recovery | ✅ works, disruptive |
+| `hlaUseAdvisories` + RTI advisory switch | broker + rid | two-layer, conditional | ❓ untested |
+
+**Heartbeat is the recommended fix.** `<heartbeat>` in the federation-B `.bcf` (default `-1`,
+off) makes the broker re-send the FULL attribute set periodically, so any late joiner recovers
+within one interval with no RTI switch and no change to the consumer.
+
+🚨 **The unit is MILLISECONDS, and MAK's docs invite a 1000x error.** The DIS broker's setting
+is documented as *"the number of seconds between heartbeats. Default: 5.0 seconds"*; the HLA
+broker's is *"the frequency with which to send an update if there is no change"* with no unit.
+They are not the same unit. Measured on one entity over ~90 s:
+
+| `<heartbeat>` | reflections of each attribute | rate |
+|---|---|---|
+| `5` | 17,445 | ~194/sec — a flood |
+| `5000` | 23 | ~1 per 4-5 s ✅ |
+
+Use `5000` for a 5-second heartbeat. `5` looks fine in a one-entity test and saturates a real
+federation.
+
+**`autoProvide` is set on the JOINER, not the creator** — measured both ways:
+
+| creator (FedB broker) | late joiner | `EntityType` |
+|---|---|---|
+| off | on | **arrives** |
+| on | off | absent |
+
+So each consumer fixes itself unilaterally, and there is no central switch to flip. It also
+needs `RTI_preferRidToFedSwitchTable 1`, which hands the RTI the WHOLE switch table from the
+rid — on this install that silently also enables `conveyProducingFederate`,
+`objectClassRelevanceAdvisory` and `interactionRelevanceAdvisory`, all `false` in the FDD.
+Restate the other nine at their FDD values or auto-provide is not the only thing you changed.
+
+**Bouncing the bridge recovers a stuck consumer, but only on a CLEAN resign.** Stopping the
+portal makes each broker shut itself down, its objects on B are deleted
+(`automaticResignAction="CancelThenDeleteThenDivest"`), and the re-registration reaches the
+consumer as a fresh discovery with full state. Measured: `objects=0` then a new `DISC` carrying
+the type. **A crashed broker does the opposite** — nothing is deleted, the consumer keeps a
+frozen ghost with no type and no updates, which is worse than the original symptom.
+
+### 🚨 The switch table is read PER FEDERATE, from the copy that federate loads
+
+Not inherited from the federation creator, despite HLA defining these switches as
+federation-wide state established at create. Measured three ways, 100 entities, late joiner:
+
+| where `autoProvide` is set | objects that recovered `EntityType` |
+|---|---|
+| FOM, creator's copy only (joiner's copy still `false`) | **11 of 100** |
+| FOM, both copies patched | **100 of 100** |
+| RID (`preferRidToFedSwitchTable 1`), on the joiner only | **100 of 100** |
+
+The 11 were objects registered AFTER the consumer subscribed — they arrived by ordinary
+initial update. The creator's setting did nothing.
+
+**Consequence for "one FED file governs the federation":** it works, but as a DISTRIBUTION
+requirement, not an inheritance mechanism. Every federate must actually load that file.
+`RTI_CONFIG` decides which copy each process loads, and this machine already carries two
+copies of `RPR_FOM_v2.0_1516-2010.xml` (repo `config/` and VR-Exchange `bin64`) read by
+different processes.
+
+⚠️ **Divergence is silent.** A federate joined successfully with a `<switches>` block that
+differed from the creator's — no error, no warning, zero subscriber errors. The RTI will not
+catch a mismatched switch table for you.
+
+### ⚠️ "Any" is not "all" — a verdict trap
+
+`run-latejoin.ps1` originally asked whether ANY object had a type. On the 11-of-100 run that
+printed NOT REPRODUCED. At one entity the bug is invisible, because any and all coincide — it
+only surfaced once the volume publisher made partial success possible. The verdict now reports
+`objects with EntityType: N of M` and fails on partial.
+
+### ❓ Not established
+
+- **Federation A is untested.** `btk-agent13` inherits `provideAttributeValueUpdate` as a no-op from
+  `NullFederateAmbassador`, so it can never answer a request. `-Scenario BrokerLate` can only ever
+  report REPRODUCED, and auto-provide cannot be evaluated there until the agent implements the
+  callback. See the `run-latejoin.ps1` header.
+- Whether a real CGF answers provide requests. If it does, the upstream path self-heals and needs no
+  RID change at all.
+- Only VR-Exchange **2.9 VC14** was measured — confirmed as the production build. MAK's own
+  package manifest (`MO2024-VRX.mopi`) lists exactly one Windows installer,
+  `vrExchange2.9-win64-vc14-20240628.exe`; there is no VC10 build of 2.9, and 2.9 bundles
+  Qt 5.15.2, which VS2010 cannot build. 2.10 (May 2026) is built on VR-Link 5.10 and is untested.
+- **The federation-B result assumes a PASSIVE consumer.** `btk_agent1516e.cpp` never calls
+  `requestAttributeValueUpdate`, by design — it is the worst case, so a fix proven against it
+  holds for any consumer. But a VR-Link-based application on B (VR-Forces, VR-Vantage, the
+  Logger) asks on discovery exactly as the broker does, and would never lose the attributes.
+  Establish what the production consumer is built on before enabling `autoProvide` to fix a
+  symptom it may not have.

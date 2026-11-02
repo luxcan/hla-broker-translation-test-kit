@@ -76,6 +76,12 @@ struct Owned {
     std::string       className;
     std::string       instName;
     std::map<RTI::AttributeHandle, Bytes> pending;   // staged by SETATTR, flushed by UPDATE
+    // Everything ever sent for this object, MERGED across updates. A real CGF sends the
+    // static attributes once and then only what moves, so `pending` holds just the last
+    // delta - it is not the object's state. Answering a provide request from `pending`
+    // would return WorldLocation alone and silently omit EntityType, which is exactly the
+    // bug a late-join test exists to detect.
+    std::map<RTI::AttributeHandle, Bytes> lastSent;
     Owned() : handle(0) {}
 };
 
@@ -90,6 +96,25 @@ struct Seen {
 
 static std::map<std::string, Owned>            g_owned;   // local id -> owned instance
 static std::map<RTI::ObjectHandle, Seen>       g_seen;    // discovered instances
+
+/// provideAttributeValueUpdate: the RTI asking us, the owner, to re-send current values.
+/// This is how a late joiner recovers attributes it was not present for, and how the
+/// federation-wide HLAautoProvide switch does its work.
+///
+/// The callback CANNOT answer in place: it runs inside tick(), and calling
+/// updateAttributeValues from there is re-entrant - HLA 1.3 declares
+/// ConcurrentAccessAttempted on exactly that path (RTIambServices.hh:346). So the request
+/// is queued here and serviced after tick() returns.
+///
+/// No mutex: the callback fires on whichever thread called tick(), and both tick sites
+/// (main and cmdWait) are the main thread. Only g_cmds is touched by the reader thread.
+static bool g_provide = true;                  // --no-provide models a CGF that ignores requests
+
+struct ProvideReq {
+    RTI::ObjectHandle                  obj;
+    std::vector<RTI::AttributeHandle>  attrs;
+};
+static std::deque<ProvideReq> g_provideQ;
 
 // ---- interactions (REQ-12) -------------------------------------------------
 // Interactions carry no instance identity: they are fire-and-forget events, so there is nothing
@@ -236,6 +261,23 @@ public:
         g_seen[theObject] = s;
 
         btk::say("DISC obj=" + U(theObject) + " class=" + s.className + " name=" + s.instName);
+    }
+
+    /// Queue only - see the note on g_provideQ for why this must not answer in place.
+    void provideAttributeValueUpdate(RTI::ObjectHandle              theObject,
+                                     const RTI::AttributeHandleSet& theAttributes)
+        throw (RTI::ObjectNotKnown, RTI::AttributeNotKnown,
+               RTI::AttributeNotOwned, RTI::FederateInternalError)
+    {
+        ProvideReq r;
+        r.obj = theObject;
+        for (RTI::ULong i = 0; i < theAttributes.size(); ++i)
+            r.attrs.push_back(theAttributes.getHandle(i));
+
+        btk::say("PROVIDEREQ obj=" + U(theObject) + " attrs=" + U((unsigned long long)r.attrs.size()) +
+                 (g_provide ? "" : " (ignored: --no-provide)"));
+
+        if (g_provide) g_provideQ.push_back(r);
     }
 
     void reflectAttributeValues(RTI::ObjectHandle                 theObject,
@@ -448,6 +490,14 @@ static void cmdUpdate(const Kv& kv)
 
     size_t n = o.pending.size();
     delete set;
+
+    // MERGE, never assign. `pending` is only the latest delta; assigning would leave
+    // lastSent holding WorldLocation alone after the first position update, and a provide
+    // response would then omit EntityType entirely.
+    for (std::map<RTI::AttributeHandle, Bytes>::const_iterator a = o.pending.begin();
+         a != o.pending.end(); ++a)
+        o.lastSent[a->first] = a->second;
+
     o.pending.clear();
     btk::say("OK UPDATE id=" + id + " attrs=" + U(n));
 }
@@ -583,6 +633,45 @@ static void cmdSnapshot()
     btk::say("OK SNAPSHOT objects=" + U(g_seen.size()));
 }
 
+/// Answer any queued provideAttributeValueUpdate requests. Safe to call only OUTSIDE
+/// tick(). Re-sends the merged lastSent state for the attributes asked for.
+static void servicePendingProvides()
+{
+    while (!g_provideQ.empty()) {
+        ProvideReq r = g_provideQ.front();
+        g_provideQ.pop_front();
+
+        Owned* o = 0;
+        for (std::map<std::string, Owned>::iterator it = g_owned.begin(); it != g_owned.end(); ++it)
+            if (it->second.handle == r.obj) { o = &it->second; break; }
+        if (!o) { btk::note("provide: we do not own obj " + U(r.obj)); continue; }
+
+        std::map<RTI::AttributeHandle, Bytes> send;
+        for (size_t i = 0; i < r.attrs.size(); ++i) {
+            std::map<RTI::AttributeHandle, Bytes>::const_iterator f = o->lastSent.find(r.attrs[i]);
+            if (f != o->lastSent.end()) send[f->first] = f->second;
+        }
+        if (send.empty()) { btk::note("provide: nothing sent yet for obj " + U(r.obj)); continue; }
+
+        RTI::AttributeHandleValuePairSet* set =
+            RTI::AttributeSetFactory::create((RTI::ULong)send.size());
+        try {
+            for (std::map<RTI::AttributeHandle, Bytes>::const_iterator a = send.begin();
+                 a != send.end(); ++a)
+            {
+                static const char kEmpty = 0;
+                set->add(a->first, a->second.empty() ? &kEmpty : (const char*)&a->second[0],
+                         (RTI::ULong)a->second.size());
+            }
+            rti().updateAttributeValues(o->handle, *set, "btk-provide");
+        }
+        catch (RTI::Exception& e) { delete set; btk::errLine("provide: " + exText(e)); continue; }
+        delete set;
+
+        btk::say("OK PROVIDE obj=" + U(r.obj) + " attrs=" + U((unsigned long long)send.size()));
+    }
+}
+
 /// WAIT ms=2000 - tick for a while. Makes scripted smoke tests possible without a parent
 /// process: `type script.txt | btk-agent13.exe`.
 static void cmdWait(const Kv& kv)
@@ -592,7 +681,14 @@ static void cmdWait(const Kv& kv)
         std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
 
     while (std::chrono::steady_clock::now() < end) {
-        if (g_joined) { try { rti().tick(0.01, 0.05); } catch (RTI::Exception&) {} }
+        // Servicing here is NOT optional. A script spends nearly all its wall time inside
+        // WAIT, and main()'s service point is not reached until the WAIT returns - so a
+        // request arriving mid-wait would sit unanswered for the whole interval, or for
+        // ever if it lands in the last one before RESIGN.
+        if (g_joined) {
+            try { rti().tick(0.01, 0.05); } catch (RTI::Exception&) {}
+            servicePendingProvides();
+        }
         else std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
     btk::say("OK WAIT ms=" + U((unsigned long long)ms));
@@ -664,6 +760,13 @@ static bool applyArgs(int argc, char** argv)
 {
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
+        // Boolean flags must be matched BEFORE the value-consuming branch below, which
+        // would otherwise swallow the next argument as this flag's value.
+        if (a == "--no-provide") {
+            g_provide = false;
+            btk::note("provideAttributeValueUpdate disabled - modelling a CGF that ignores requests");
+            continue;
+        }
         std::string val;
         size_t eq = a.find('=');
         if (eq != std::string::npos) { val = a.substr(eq + 1); a = a.substr(0, eq); }
@@ -687,6 +790,7 @@ int main(int argc, char** argv)
         if (g_joined) {
             try { rti().tick(0.01, 0.05); }
             catch (RTI::Exception& e) { btk::note("tick: " + exText(e)); }
+            servicePendingProvides();
         }
         else {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
