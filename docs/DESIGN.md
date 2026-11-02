@@ -361,8 +361,8 @@ Open:
   assumes a passive consumer (neither agent calls `requestAttributeValueUpdate`).
 - **Delete / remove** (§9 scope) — the agents implement `DELETE` and the removal callback, but no
   CSV syntax or runner step drives it.
-- **Run history** — `Store.BeginRun/SaveStep/EndRun` exist with no callers; the GUI keeps nothing
-  after it closes.
+- ~~**Run history**~~ — **done 2026-11-02**: every GUI run is saved row by row; History reopens it,
+  Export writes CSV (APP-REQUIREMENTS REQ-05).
 - **Fresh clone** — licensed inputs are gitignored by design; the copy-in steps are not written
   down yet.
 

@@ -1178,47 +1178,16 @@ namespace BrokerTestKit.Cli
 
                 if (reportPath != null)
                 {
-                    WriteRunReportCsv(reportPath, report, input);
+                    RunReportCsv.Write(reportPath, report, new[]
+                    {
+                        "input    " + System.IO.Path.GetFullPath(inPath),
+                        "expected " + System.IO.Path.GetFullPath(outPath),
+                        "profile  " + (profilePath == null ? "(none)" : System.IO.Path.GetFullPath(profilePath)),
+                    });
                     Console.WriteLine("report  " + System.IO.Path.GetFullPath(reportPath));
                 }
                 return report.AllPassed ? 0 : 1;
             }
-        }
-
-        /// <summary>
-        /// Every row's outcome as CSV (REQ-05). The console shows the failures; this is the
-        /// artefact - it outlives the terminal buffer and diffs cleanly between runs.
-        /// </summary>
-        private static void WriteRunReportCsv(string path, RunReport report, List<InputStep> input)
-        {
-            var inv = System.Globalization.CultureInfo.InvariantCulture;
-            var byStep = new Dictionary<int, InputStep>();
-            foreach (var s in input) byStep[s.Step] = s;
-
-            using (var w = new System.IO.StreamWriter(path, false, new System.Text.UTF8Encoding(false)))
-            {
-                foreach (var line in report.Summary().Split('\n')) w.WriteLine("# " + line.TrimEnd('\r'));
-                w.WriteLine("row,entityId,outcome,seconds,latencyMs,message,failedFields");
-                foreach (var st in report.Steps)
-                {
-                    InputStep src;
-                    var id = byStep.TryGetValue(st.Step, out src) ? src.EntityId : "";
-                    var bad = new List<string>();
-                    foreach (var f in st.Fields) if (!f.Ok) bad.Add(f.ToString());
-                    w.WriteLine(string.Format(inv, "{0},{1},{2},{3:F3},{4},{5},{6}",
-                        st.Step, Csv(id), st.Outcome, st.Elapsed.TotalSeconds,
-                        st.Latency.HasValue
-                            ? st.Latency.Value.TotalMilliseconds.ToString("F1", inv) : "",
-                        Csv(st.Message), Csv(string.Join(" | ", bad.ToArray()))));
-                }
-            }
-        }
-
-        private static string Csv(string v)
-        {
-            if (string.IsNullOrEmpty(v)) return "";
-            if (v.IndexOfAny(new[] { ',', '"', '\n', '\r' }) < 0) return v;
-            return "\"" + v.Replace("\"", "\"\"") + "\"";
         }
 
         /// <summary>

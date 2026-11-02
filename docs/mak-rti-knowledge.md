@@ -545,7 +545,7 @@ lost or mismatched.
 The portal's `maxObjectViewCount` (5000 by default, in `VR-Exchange.xml`) is the first ceiling
 worth raising for a larger run.
 
-### Bridge latency: ~29 ms, tight, and flat across 500 objects ✅
+### Bridge latency: 18-29 ms, tight within a run, flat across 500 objects ✅
 
 Send to receive — update handed to federation A, matching state observed on federation B — over
 500 entities, re-measured 2026-11-02 (CLI `entity --profile bridge-stock-rpr.profile --quiet`):
@@ -569,12 +569,25 @@ harness measuring itself (the GUI's transcript handler blocked the thread that s
 times; fixed in `47f98ef`), but the August number was a CLI run, so that does not fully account
 for it. Do not quote 43 ms.
 
-❓ **The CLI and the GUI disagree by ~10 ms.** For 12 identical rows the GUI (after that fix)
-read mean 18.6 ms; the CLI reads 28.7 ms. Both stamp in the same engine code, so the difference
-is in the host process, not the broker. Treat **~29 ms as an upper bound** on what VR-Exchange
-costs, measured from outside — agent A's own dispatch is inside it. It is a small bound: the
-reflect on B routinely arrives before agent A has finished printing its own `OK UPDATE`, which
-is what made an earlier attempt to measure from the acknowledgement report a flat 0 ms.
+❓ **The level is not stable: ~18 ms or ~29 ms, and the cause is unknown.** Every run on
+2026-11-02 was on the same rig:
+
+| run | surface | mean |
+|---|---|---|
+| 12 rows, first bridge start | CLI | 28.7 ms |
+| 500 rows, after a bridge restart | CLI | 28.7 ms |
+| 12 rows, same bridge instance, ~1 h later | CLI | 18.7 ms |
+| 12 rows, same bridge instance, ~1 h later | GUI | 18.0 ms |
+
+Within a run the spread stays tight either way; it is the level that moves. An earlier note here
+blamed a CLI-vs-GUI difference — the last two rows rule that out. So quote **18-29 ms**, not a
+single figure, and treat it as an upper bound on what VR-Exchange costs, measured from outside —
+agent A's own dispatch is inside it. It is a small bound: the reflect on B routinely arrives
+before agent A has finished printing its own `OK UPDATE`, which is what made an earlier attempt
+to measure from the acknowledgement report a flat 0 ms.
+
+For scale: an RPR 2.0 -> 2.0 loopback on RTI 5.0.1 with no broker in the path read 15.5-16.9 ms
+(2 rows only - too few to subtract from the above with any confidence).
 
 ### If vrx never opens its portal socket, check the licence first ⚠️
 

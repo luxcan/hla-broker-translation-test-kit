@@ -112,7 +112,7 @@ namespace BrokerTestKit.Engine
 
             foreach (var step in input)
             {
-                var result = new StepResult { Step = step.Step };
+                var result = new StepResult { Step = step.Step, EntityId = step.EntityId };
                 var stepSw = Stopwatch.StartNew();
 
                 ExpectedStep exp;

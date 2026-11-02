@@ -75,6 +75,11 @@ namespace BrokerTestKit.Engine
     public sealed class StepResult
     {
         public int Step;
+        /// <summary>
+        /// The input row's entity id (e.g. "1:1:7"), carried on the RESULT so a saved or exported
+        /// run still says which entity each row was about without the input sheet beside it.
+        /// </summary>
+        public string EntityId;
         public Outcome Outcome;
         /// <summary>Whole step: quiesce + publish + wait. What the operator waits for.</summary>
         public TimeSpan Elapsed;

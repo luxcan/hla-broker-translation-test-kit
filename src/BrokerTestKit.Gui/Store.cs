@@ -29,9 +29,30 @@ namespace BrokerTestKit.Gui
         public bool SelfTest;
         public int Passed, Failed, TimedOut;
         public double Seconds;
+        public string ConnA, ConnB, AbortReason, InputPath, ExpectedPath;
+        /// <summary>False when the app died mid-run: the rows that did complete are still saved.</summary>
+        public bool Finished;
 
         public string Started { get { return StartedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture); } }
-        public string Outcome { get { return Failed + TimedOut == 0 ? "Pass" : "Fail"; } }
+        public string Outcome
+        {
+            get
+            {
+                if (!Finished) return "Incomplete";
+                if (!string.IsNullOrEmpty(AbortReason)) return "Aborted";
+                return Failed + TimedOut == 0 && Passed > 0 ? "Pass" : "Fail";
+            }
+        }
+        public string Pair
+        {
+            get
+            {
+                var a = string.IsNullOrEmpty(ConnA) ? ExecA : ConnA;
+                var b = string.IsNullOrEmpty(ConnB) ? ExecB : ConnB;
+                return SelfTest ? a + "  (self-test)" : a + "  →  " + b;
+            }
+        }
+        public string Duration { get { return Seconds.ToString("F1", CultureInfo.InvariantCulture) + " s"; } }
         public string Tally { get { return Passed + " passed · " + Failed + " failed · " + TimedOut + " timed out"; } }
         public string Mode { get { return SelfTest ? "self-test" : "A → broker → B"; } }
     }
@@ -160,6 +181,14 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
             // later columns are added one at a time, guarded.
             AddColumn("connection", "assistant_port", "TEXT NOT NULL DEFAULT ''");
             AddColumn("connection", "config_dir", "TEXT NOT NULL DEFAULT ''");
+            // Run history was defined before anything wrote to it, and lacked what the Run tab
+            // actually shows: the latency per row, why a run stopped, and which pair was tested.
+            AddColumn("run_step", "latency_ms", "REAL");
+            AddColumn("run", "abort_reason", "TEXT");
+            AddColumn("run", "conn_a", "TEXT");
+            AddColumn("run", "conn_b", "TEXT");
+            AddColumn("run", "input_path", "TEXT");
+            AddColumn("run", "expected_path", "TEXT");
         }
 
         /// <summary>Add a column unless it is already there. SQLite has no ADD COLUMN IF NOT EXISTS.</summary>
@@ -503,13 +532,20 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
         // -------------------------------------------------------------------- runs --
 
         public long BeginRun(string fomA, string fomB, string execA, string execB, bool selfTest,
-                             string inputHash, string expectedHash)
+                             string inputHash, string expectedHash,
+                             string connA = null, string connB = null,
+                             string inputPath = null, string expectedPath = null)
         {
             using (var cmd = _cn.CreateCommand())
             {
                 cmd.CommandText =
-                    "INSERT INTO run(started_utc,fom_a,fom_b,exec_a,exec_b,self_test,input_hash,expected_hash) " +
-                    "VALUES($t,$fa,$fb,$ea,$eb,$st,$ih,$eh); SELECT last_insert_rowid();";
+                    "INSERT INTO run(started_utc,fom_a,fom_b,exec_a,exec_b,self_test,input_hash,expected_hash," +
+                    "conn_a,conn_b,input_path,expected_path) " +
+                    "VALUES($t,$fa,$fb,$ea,$eb,$st,$ih,$eh,$ca,$cb,$ip,$ep); SELECT last_insert_rowid();";
+                cmd.Parameters.AddWithValue("$ca", (object)connA ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$cb", (object)connB ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$ip", (object)inputPath ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$ep", (object)expectedPath ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$t", Utc());
                 cmd.Parameters.AddWithValue("$fa", (object)fomA ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$fb", (object)fomB ?? DBNull.Value);
@@ -528,11 +564,13 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
             using (var cmd = _cn.CreateCommand())
             {
                 cmd.CommandText =
-                    "INSERT INTO run_step(run_id,step,entity_id,outcome,elapsed_ms,message) " +
-                    "VALUES($r,$s,$e,$o,$ms,$m); SELECT last_insert_rowid();";
+                    "INSERT INTO run_step(run_id,step,entity_id,outcome,elapsed_ms,message,latency_ms) " +
+                    "VALUES($r,$s,$e,$o,$ms,$m,$l); SELECT last_insert_rowid();";
                 cmd.Parameters.AddWithValue("$r", runId);
                 cmd.Parameters.AddWithValue("$s", step.Step);
-                cmd.Parameters.AddWithValue("$e", DBNull.Value);
+                cmd.Parameters.AddWithValue("$e", (object)step.EntityId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$l", step.Latency.HasValue
+                    ? (object)step.Latency.Value.TotalMilliseconds : DBNull.Value);
                 cmd.Parameters.AddWithValue("$o", step.Outcome.ToString());
                 cmd.Parameters.AddWithValue("$ms", (long)step.Elapsed.TotalMilliseconds);
                 cmd.Parameters.AddWithValue("$m", (object)step.Message ?? DBNull.Value);
@@ -561,7 +599,9 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
             using (var cmd = _cn.CreateCommand())
             {
                 cmd.CommandText =
-                    "UPDATE run SET finished_utc=$t, passed=$p, failed=$f, timed_out=$x, seconds=$s WHERE id=$id";
+                    "UPDATE run SET finished_utc=$t, passed=$p, failed=$f, timed_out=$x, seconds=$s, " +
+                    "abort_reason=$ab WHERE id=$id";
+                cmd.Parameters.AddWithValue("$ab", (object)report.AbortReason ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$t", Utc());
                 cmd.Parameters.AddWithValue("$p", report.Passed);
                 cmd.Parameters.AddWithValue("$f", report.Failed);
@@ -578,7 +618,8 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
             using (var cmd = _cn.CreateCommand())
             {
                 cmd.CommandText =
-                    "SELECT id,started_utc,fom_a,fom_b,exec_a,exec_b,self_test,passed,failed,timed_out,seconds " +
+                    "SELECT id,started_utc,fom_a,fom_b,exec_a,exec_b,self_test,passed,failed,timed_out,seconds," +
+                    "conn_a,conn_b,abort_reason,input_path,expected_path,finished_utc " +
                     "FROM run ORDER BY id DESC LIMIT $n";
                 cmd.Parameters.AddWithValue("$n", limit);
                 using (var r = cmd.ExecuteReader())
@@ -598,6 +639,12 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
                             Failed = r.GetInt32(8),
                             TimedOut = r.GetInt32(9),
                             Seconds = r.GetDouble(10),
+                            ConnA = Str(r, 11),
+                            ConnB = Str(r, 12),
+                            AbortReason = Str(r, 13),
+                            InputPath = Str(r, 14),
+                            ExpectedPath = Str(r, 15),
+                            Finished = !r.IsDBNull(16),
                         });
                 }
             }
@@ -636,7 +683,8 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
             var ids = new List<long>();
             using (var cmd = _cn.CreateCommand())
             {
-                cmd.CommandText = "SELECT id,step,outcome,elapsed_ms,message FROM run_step WHERE run_id=$r ORDER BY step";
+                cmd.CommandText = "SELECT id,step,outcome,elapsed_ms,message,entity_id,latency_ms " +
+                                  "FROM run_step WHERE run_id=$r ORDER BY step";
                 cmd.Parameters.AddWithValue("$r", runId);
                 using (var r = cmd.ExecuteReader())
                     while (r.Read())
@@ -649,6 +697,11 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
                             Outcome = o,
                             Elapsed = TimeSpan.FromMilliseconds(r.GetInt64(3)),
                             Message = Str(r, 4),
+                            EntityId = Str(r, 5),
+                            // FromTicks, not FromMilliseconds: on .NET Framework the latter rounds to a whole
+                            // millisecond, so a saved 19.2 ms came back as 19.0.
+                            Latency = r.IsDBNull(6) ? (TimeSpan?)null
+                                    : TimeSpan.FromTicks((long)Math.Round(r.GetDouble(6) * TimeSpan.TicksPerMillisecond)),
                         });
                         ids.Add(r.GetInt64(0));
                     }

@@ -49,7 +49,8 @@ them copied in before it builds or runs.
   `ExerciseConnection.addMessageHandler`/`sendMessage`) — FOM-agnostic, by-name, raw `byte[]`.
 - The harness is **independent** of the C++ broker (tests it as a black box).
 - **GUI = `src/BrokerTestKit.Gui`** (WPF, 5 tabs: FOM registry / Connections / CSV template /
-  Test data / Run). It holds no RTI connection - the agents are child processes. The CLI stays the CI entry
+  Test data / Run). Every run is saved as it happens; *History…* reopens it and *Export results…*
+  writes the same CSV as the CLI's `--report`. It holds no RTI connection - the agents are child processes. The CLI stays the CI entry
   point (`entity`, `native`, `template`, `fom` modes).
 - **Custom attributes require the NATIVE agents**, not C#. The C# VR-Link binding has no FOM
   Mapper/encoder, so unmodelled attributes never reach the wire. `src/BrokerTestKit.AgentNative/`

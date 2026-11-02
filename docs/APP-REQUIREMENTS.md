@@ -137,17 +137,26 @@ Warn when a pass lands near the timeout (flakiness early-warning).
 
 ---
 
-## REQ-05 — Results & CI ✅ (CLI) / ⏳ (report files)
+## REQ-05 — Results & CI ✅ (CLI + GUI, CSV) / ⏳ (JUnit XML, HTML)
 
 Per-step Pass / Fail / Timeout with field-level diffs (`expected`, `actual`, `delta`, `tol`).
 Non-zero process exit on any failure so it can gate CI. *(To add: JUnit XML + HTML report.)*
+
+**Kept and exportable ✅ (2026-11-02).** Every GUI run is saved as it happens - one record per run,
+one per row, one per field compared - in the workspace's SQLite store, so a stopped, aborted or
+crashed run still keeps every row that completed. *History…* on the Run tab reopens any past run
+exactly as it looked (rows, field-level diffs, latency); *Export results…* writes it as CSV. The
+CLI's `--report` and the GUI export share one writer (`Engine/RunReportCsv.cs`), so the two files
+read the same: `#` header lines with the pair, both sheets and the summary, then
+`row,entityId,outcome,seconds,latencyMs,message,failedFields`. Written with a UTF-8 BOM so Excel
+opens it correctly. The agent transcript is not kept in history.
 
 `Fail` and `Timeout` are deliberately distinct: **Fail** means an object arrived on B and the
 values were wrong (the broker is alive and translating incorrectly); **Timeout** means nothing
 arrived at all (the broker is silent, or a subscription is wrong). Different defects, different
 first thing to check.
 
-Entry point: `BrokerTestKit.Cli.exe native <input.csv> <output.csv> [--selftest]`.
+Entry point: `BrokerTestKit.Cli.exe entity <input.csv> <expected.csv> --profile <file> [--report out.csv]`.
 
 ---
 
@@ -261,8 +270,10 @@ row updates marshalled through the Dispatcher, a Stop button, and a self-test ch
 both agents on Federation A for an identity mapping. Licence exhaustion (`-4,132`) is recognised
 and explained in words, with the raw text kept underneath (REQ-07 partly satisfied).
 
-**Remaining polish:** save/load a run profile (REQ-02), report export (REQ-05), and a FOM-diff view
-between the A and B models.
+*Export results…* and *History…* (REQ-05) keep and reopen every run.
+
+**Remaining polish:** a FOM-diff view between the A and B models, and generating a matched sender +
+receiver template pair from the selected connections in one step.
 
 ---
 

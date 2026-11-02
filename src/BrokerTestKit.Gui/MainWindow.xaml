@@ -493,6 +493,11 @@
                             <Button x:Name="RunButton" Content="Run test" Click="RunTest"
                                     Style="{StaticResource AccentButton}" MinWidth="120"/>
                             <Button x:Name="StopButton" Content="Stop" Click="StopTest" IsEnabled="False"/>
+                            <Button x:Name="ExportButton" Content="Export results…" Click="ExportResults"
+                                    IsEnabled="False" Margin="16,0,0,0"
+                                    ToolTip="Save the results on screen as CSV - the same format as the CLI's --report."/>
+                            <Button x:Name="HistoryButton" Content="History…" Click="ShowHistory"
+                                    ToolTip="Every run is saved as it happens. Reopen one to inspect or export it."/>
                             <CheckBox x:Name="SelfTest" Content="Self-test — both agents on connection A, identity mapping"
                                       VerticalAlignment="Center" Margin="16,0,0,0"
                                       ToolTip="Proves the rig without the broker. Any failure is the harness's fault."/>

@@ -879,6 +879,7 @@ namespace BrokerTestKit.Gui
             catch (Exception ex) { Fail("Could not save the sheets before running", ex); return; }
 
             _results.Clear();
+            Show(null, null);
             FieldGrid.ItemsSource = null;
             _log.Length = 0;
             LogBox.Text = "";
@@ -895,6 +896,8 @@ namespace BrokerTestKit.Gui
                 SelfTest = selfTest,
                 A = recA,
                 B = selfTest ? recA : recB,
+                ConnAName = connA.Name,
+                ConnBName = connB.Name,
                 ExecA = connA.ExecName,
                 ExecB = connB.ExecName,
                 FederateA = connA.FederateName,
@@ -916,9 +919,181 @@ namespace BrokerTestKit.Gui
         private sealed class RunContext
         {
             public string InputPath, ExpectedPath, ExecA, ExecB, FederateA, FederateB, Licence;
+            public string ConnAName, ConnBName;
             public bool SelfTest;
             public FomEntryRecord A, B;
             public SideSettings RtiA, RtiB;
+        }
+
+        // ------------------------------------------------------- results & history ----
+
+        /// <summary>The run on screen - just finished, or reopened from history. What Export writes.</summary>
+        private RunReport _shownReport;
+        private List<string> _shownContext;
+
+        private void Show(RunReport report, List<string> context)
+        {
+            _shownReport = report;
+            _shownContext = context;
+            ExportButton.IsEnabled = report != null && report.Steps.Count > 0;
+        }
+
+        private static List<string> RunContextLines(RunContext ctx, DateTime when)
+        {
+            return new List<string>
+            {
+                "run      " + when.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+                "pair     " + (ctx.SelfTest ? ctx.ConnAName + "  (self-test)" : ctx.ConnAName + "  ->  " + ctx.ConnBName),
+                "input    " + ctx.InputPath,
+                "expected " + ctx.ExpectedPath,
+            };
+        }
+
+        /// <summary>
+        /// Content hash of a sheet, so history can tell "same test, different result" from "the
+        /// test itself changed" - the file at a path can be edited between runs.
+        /// </summary>
+        private static string HashOf(string path)
+        {
+            try
+            {
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                using (var f = File.OpenRead(path))
+                    return BitConverter.ToString(sha.ComputeHash(f)).Replace("-", "").ToLowerInvariant();
+            }
+            catch { return null; }
+        }
+
+        private void ExportResults(object sender, RoutedEventArgs e)
+        {
+            if (_shownReport == null || _shownReport.Steps.Count == 0) { Status("Nothing to export yet."); return; }
+
+            var dlg = new SaveFileDialog
+            {
+                Filter = "CSV (*.csv)|*.csv|All files (*.*)|*.*",
+                FileName = "run-" + DateTime.Now.ToString("yyyyMMdd-HHmm", CultureInfo.InvariantCulture) + ".csv",
+                Title = "Export run results",
+            };
+            if (dlg.ShowDialog() != true) { Status("Not exported."); return; }
+
+            try { RunReportCsv.Write(dlg.FileName, _shownReport, _shownContext); }
+            catch (Exception ex) { Fail("Could not export the results", ex); return; }
+            Status("Exported " + Path.GetFileName(dlg.FileName) + "  ·  " + _shownReport.Steps.Count + " row(s).");
+        }
+
+        /// <summary>
+        /// Every run the app has made, newest first. Opening one puts it back on the Run tab exactly
+        /// as it looked - rows, field-level diffs, latency - so it can be inspected or exported later.
+        /// </summary>
+        private void ShowHistory(object sender, RoutedEventArgs e)
+        {
+            List<RunSummary> runs;
+            try { runs = _store.RecentRuns(500); }
+            catch (Exception ex) { Fail("Could not read run history", ex); return; }
+            if (runs.Count == 0) { Status("No runs recorded yet."); return; }
+
+            var grid = new DataGrid
+            {
+                ItemsSource = runs,
+                IsReadOnly = true,
+                AutoGenerateColumns = false,
+                SelectionMode = DataGridSelectionMode.Single,
+                Margin = new Thickness(0, 0, 0, 10),
+            };
+            foreach (var c in new[]
+            {
+                new { H = "Started", P = "Started", W = 130.0 },
+                new { H = "Pair", P = "Pair", W = -1.0 },
+                new { H = "Outcome", P = "Outcome", W = 90.0 },
+                new { H = "Rows", P = "Tally", W = 250.0 },
+                new { H = "Took", P = "Duration", W = 70.0 },
+            })
+                grid.Columns.Add(new DataGridTextColumn
+                {
+                    Header = c.H,
+                    Binding = new System.Windows.Data.Binding(c.P),
+                    Width = c.W < 0 ? new DataGridLength(1, DataGridLengthUnitType.Star) : new DataGridLength(c.W),
+                });
+
+            var open = new Button { Content = "Open", MinWidth = 90, IsEnabled = false, IsDefault = true,
+                                    Style = (Style)FindResource("AccentButton") };
+            var close = new Button { Content = "Close", MinWidth = 90, IsCancel = true, Margin = new Thickness(8, 0, 0, 0) };
+            grid.SelectionChanged += (s2, e2) => open.IsEnabled = grid.SelectedItem != null;
+
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            buttons.Children.Add(open);
+            buttons.Children.Add(close);
+            var root = new DockPanel { Margin = new Thickness(16) };
+            DockPanel.SetDock(buttons, Dock.Bottom);
+            root.Children.Add(buttons);
+            root.Children.Add(grid);
+
+            var win = new Window
+            {
+                Title = "Run history",
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Width = 900,
+                Height = 520,
+                Owner = this,
+                Background = (System.Windows.Media.Brush)FindResource("AppBackground"),
+                Content = root,
+            };
+            RunSummary picked = null;
+            open.Click += (s2, e2) => { picked = grid.SelectedItem as RunSummary; win.Close(); };
+            grid.MouseDoubleClick += (s2, e2) =>
+            {
+                if (grid.SelectedItem == null) return;
+                picked = grid.SelectedItem as RunSummary;
+                win.Close();
+            };
+            win.ShowDialog();
+
+            if (picked != null) LoadRun(picked);
+        }
+
+        private void LoadRun(RunSummary run)
+        {
+            List<StepResult> steps;
+            try { steps = _store.StepsOf(run.Id); }
+            catch (Exception ex) { Fail("Could not load run " + run.Id, ex); return; }
+
+            var report = new RunReport
+            {
+                StartedUtc = run.StartedUtc,
+                Duration = TimeSpan.FromSeconds(run.Seconds),
+                AbortReason = string.IsNullOrEmpty(run.AbortReason) ? null : run.AbortReason,
+            };
+            report.Steps.AddRange(steps);
+
+            _results.Clear();
+            FieldGrid.ItemsSource = null;
+            foreach (var st in steps)
+            {
+                var row = new ResultRow
+                {
+                    Step = st.Step,
+                    EntityId = st.EntityId,
+                    Outcome = st.Outcome.ToString(),
+                    Message = st.Message,
+                    Seconds = st.Elapsed.TotalSeconds,
+                    Latency = st.Latency.HasValue
+                        ? st.Latency.Value.TotalMilliseconds.ToString("F1", CultureInfo.InvariantCulture) : "",
+                };
+                foreach (var f in st.Fields) row.Fields.Add(FieldRow.From(f));
+                _results.Add(row);
+            }
+
+            Show(report, new List<string>
+            {
+                "run      " + run.Started + "   (history #" + run.Id + ")",
+                "pair     " + run.Pair,
+                "input    " + run.InputPath,
+                "expected " + run.ExpectedPath,
+            });
+            SummaryText.Text = report.Summary();
+            LogBox.Text = "(agent transcript is not kept in history)";
+            Status("Run #" + run.Id + "  ·  " + run.Started + "  ·  " + run.Pair + "  ·  " + run.Outcome);
+            GoTo(PageRun);
         }
 
         private void StopTest(object sender, RoutedEventArgs e)
@@ -930,6 +1105,8 @@ namespace BrokerTestKit.Gui
         private void RunWorker(RunContext ctx)
         {
             NativeAgentHost a = null, b = null;
+            var report = new RunReport();
+            long runId = 0;
             try
             {
                 EntityCsvParser.Sheet sheetIn, sheetOut;
@@ -942,6 +1119,15 @@ namespace BrokerTestKit.Gui
                         _results.Add(new ResultRow { Step = st.Step, EntityId = st.EntityId, Outcome = "…" });
                     return true;
                 });
+
+                // Opened BEFORE the first row, and each row saved as it lands: a run that is
+                // stopped, aborts or crashes still leaves every completed row on record. The store
+                // is touched only on the UI thread, where every other use of it happens.
+                runId = Dispatch(() => _store.BeginRun(
+                    ctx.A.Name, ctx.B.Name, ctx.ExecA, ctx.ExecB, ctx.SelfTest,
+                    HashOf(ctx.InputPath), HashOf(ctx.ExpectedPath),
+                    ctx.ConnAName, ctx.SelfTest ? ctx.ConnAName : ctx.ConnBName,
+                    ctx.InputPath, ctx.ExpectedPath));
 
                 var cfgA = Config("A", ctx.A, ctx.ExecA, ctx.FederateA, sheetIn.ClassName, sheetIn.IsInteraction);
                 var cfgB = Config("B", ctx.B, ctx.ExecB, ctx.FederateB, sheetOut.ClassName, sheetOut.IsInteraction);
@@ -964,7 +1150,6 @@ namespace BrokerTestKit.Gui
                 // (every per-row report times only its own row, so the summary read "in 0.0s" for
                 // every run) and the abort (the runner sets it on the per-row report and breaks a
                 // loop that only ever had one row in it, so the run carried on regardless).
-                var report = new RunReport();
                 var wall = System.Diagnostics.Stopwatch.StartNew();
                 foreach (var step in input)
                 {
@@ -987,6 +1172,8 @@ namespace BrokerTestKit.Gui
                                 : "";
                             row.Fields.Clear();
                             foreach (var f in captured.Fields) row.Fields.Add(FieldRow.From(f));
+                            try { _store.SaveStep(runId, captured); }
+                            catch (Exception ex) { Status("Could not save row " + captured.Step + ": " + ex.Message); }
                             return true;
                         });
                     }
@@ -998,6 +1185,9 @@ namespace BrokerTestKit.Gui
 
                 Dispatch(() =>
                 {
+                    if (_abort && !report.Aborted) report.AbortReason = "stopped by the operator";
+                    try { _store.EndRun(runId, report); } catch { }
+                    Show(report, RunContextLines(ctx, DateTime.Now));
                     SummaryText.Text = report.Summary();
                     Status(report.Aborted ? "ABORTED — " + report.AbortReason
                                           : report.AllPassed ? "PASS — every row matched."
@@ -1007,7 +1197,18 @@ namespace BrokerTestKit.Gui
             }
             catch (Exception ex)
             {
-                Dispatch(() => { Fail("Run failed", ex); return true; });
+                Dispatch(() =>
+                {
+                    // Close the record with what DID complete, and say why it stopped.
+                    if (runId > 0)
+                    {
+                        report.AbortReason = "run failed: " + ex.Message;
+                        try { _store.EndRun(runId, report); } catch { }
+                        Show(report, RunContextLines(ctx, DateTime.Now));
+                    }
+                    Fail("Run failed", ex);
+                    return true;
+                });
             }
             finally
             {
