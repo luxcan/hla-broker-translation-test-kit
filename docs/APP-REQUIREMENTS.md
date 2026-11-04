@@ -324,3 +324,38 @@ to discover, and nothing to correlate by except the values themselves.
 Proven end to end (`entity tests/weaponfire-input.csv tests/weaponfire-output.csv --selftest`):
 3 interactions, 12 parameter comparisons, all pass in 1.7 s — and verified to fail correctly,
 reporting `interaction arrived on B but 2 of 4 field(s) differ` with per-parameter diffs.
+
+---
+
+## REQ-13 — Multi-sheet test cases ⏳
+
+A **test case** is one behaviour of the broker to check, and it may span **several classes on
+each side**: N Send sheets on A, M Receive sheets on B. The motivating case is a one-to-many
+translation, where one class on A becomes two on B:
+
+| Send · A (RPR 1.0) | Receive · B (RPR 2.0) |
+|---|---|
+| `Aircraft` with `IFFCode1` | `Aircraft` **and** a separate `IFF` object whose `HostObjectIdentifier` points back at it |
+
+One-to-many mappings like this are where a broker most easily goes wrong, and today they cannot
+be tested at all.
+
+**Today:** a run takes exactly one input sheet and one expected sheet, one class each
+(`EntityCsvParser.ReadInput` / `ReadExpected`, [Program.cs](../src/BrokerTestKit.Cli/Program.cs) ~l.1053),
+and rows correlate by `entityId` within that one class.
+
+**Needs:**
+1. **A test-case unit** that names its Send sheets and Receive sheets (a small manifest, or
+   several `# class:` blocks in one file); each sheet still resolves against its own side's FOM
+   exactly as in REQ-03/REQ-09.
+2. **Cross-class correlation** — a Receive row can be tied to a Send row through a reference
+   attribute (e.g. `IFF.HostObjectIdentifier` → the aircraft's `EntityIdentifier`), not only by
+   its own `entityId`.
+3. **A verdict that waits for every expected class**: a Send row passes only when all of its
+   Receive rows, across all classes, have matched within the timeout (REQ-04). A missing `IFF`
+   is a failure of the `Aircraft` row, not a silent pass.
+4. **Reporting** (REQ-05) per test case, then per class, then per row and field.
+
+**UI** — drawn in the *screen redesign* canvas: Pairs → Pair details → *Add / edit test case*
+(class chips per side, one sheet per class) → *Test case result*. Interaction sheets (REQ-12)
+should be allowed in the same test case as object sheets.
