@@ -5,6 +5,9 @@
 > Written 2026-11-04. Source of truth for the look:
 > the canvas **"HLA Broker Translation Test Kit — screen redesign"**
 > (https://claude.ai/artifact/TJeAJ4MY9G2Etzx654igHq, private to the owner).
+> Its boards: **main flow** Dashboard → Pairs → Pair details → Add / edit test case → Test case
+> result; **second row** Dashboard first launch, All results, New / edit pair, Delete pair —
+> confirm; **third row** FOM registry · Add a FOM, CSV template. Every screen in §3 has a board.
 > Related requirements: REQ-03/04/05/07/10/13 in [docs/APP-REQUIREMENTS.md](../docs/APP-REQUIREMENTS.md).
 
 ---
@@ -36,8 +39,8 @@ Sidebar:  Dashboard · Pairs  ……  Tools: CSV template · FOM registry  …�
 ### 3.1 Sidebar (every screen)
 - Brand, then **Dashboard**, **Pairs** (Pairs stays highlighted on Pair details, Add/edit test case
   and Test case result).
-- **Tools** (bottom): *CSV template* (today's template tab, unchanged inside) and *FOM registry*
-  (today's registry tab, unchanged inside).
+- **Tools** (bottom): *CSV template* and *FOM registry* — today's two tabs, restyled, behaviour
+  almost unchanged (§3.11).
 - **Test run box** (bottom-left), two states:
   - *Running*: badge "Running", pair name, test case name, progress bar, `7 / 12 rows · 7 pass ·
     0 fail`, next queued test case. Click → that run's Test case result screen.
@@ -92,8 +95,7 @@ Sidebar:  Dashboard · Pairs  ……  Tools: CSV template · FOM registry  …�
 - **Tolerance is per field, on the Receive sheets only** (D2): a "± tolerance" row directly under
   the column headers, editable only for float columns, blank = exact. It reads from and writes to
   the sheet's existing `# tolerance:` directive (e.g. `WorldLocation.*=0.5`), so no storage change.
-  New float columns are pre-filled from the CSV-template default (0.001). The canvas still shows the
-  old single field — the PRP wins.
+  New float columns are pre-filled from the CSV-template default (0.001).
 - **Send** (on A · HLA · FOM) and **Receive** (on B · HLA · FOM) side by side. Each: class chip(s)
   with ×, *+ Class*, and per class a sheet card (*Upload CSV…*, *Download template*, editable grid,
   *+ Add row*). Classes come from that side's FOM (reuse the template tab's class picker).
@@ -113,6 +115,48 @@ Sidebar:  Dashboard · Pairs  ……  Tools: CSV template · FOM registry  …�
 - *Agent transcript* expander (live runs only; transcripts are not persisted today).
 - **Runs of this test case**: When · Result · Duration · View; the shown run is highlighted.
 
+### 3.9 New / edit pair (D1)
+- Breadcrumb `Pairs / <pair> / Edit pair`; *New pair* opens the same screen empty, titled
+  *New pair*, with no *Delete pair*.
+- **Pair name**, suggested from the two FOMs (`<FOM A> → <FOM B>`), free to type over.
+- **Send · A** and **Receive · B** cards side by side, a "VR-Exchange 2.9 translates" arrow between.
+  Each card: HLA badge (follows the FOM), *FOM — from the registry* (+ *Manage FOMs* →
+  FOM registry), Federation (exec) name, Federate name, then **RTI**: bin folder, RID file,
+  FOM search folder (`RTI_CONFIG`, blank = the rid's folder), RTI Assistant port ("must differ from
+  the other side"), and a status line with *Re-check* (`RTI found · rid parses · FOM resolves`).
+- Evolved side only: a **Join modules** box — `16 modules from bin64\MAK-1516e-Config.xml`,
+  *Edit list*, and the warning "Without them B joins cleanly and receives nothing" (CLAUDE.md, §9).
+- Under the cards: the `CrossVersionWarning` / port check as one line (tick when fine, amber when not).
+- **Advanced** (collapsed): *Self-test* (moved here, §3.7) and **Licence server (shared by every
+  pair)** — it moves here from the old Connections tab; still one value in `setting`.
+- Sticky footer: *Delete pair…* (red outline, left) · *Cancel* · *Save pair*. Cancel / Save return
+  to Pair details (to Pairs for a new pair).
+- *Delete pair…* opens the **confirm dialog** (board *Delete pair — confirm*): title "Delete this
+  pair?", the D5 sentence with the real counts, "Export any results you want to keep first.
+  Uploaded sheets stay on disk.", buttons *Keep pair* and red *Delete pair and 41 runs* (count in
+  the label). Afterwards → Pairs.
+
+### 3.10 All results
+- Reached from *All results* on the Dashboard (unfiltered) and on Pair details (pre-filtered to
+  that pair). Breadcrumb `Dashboard / All results`; sidebar highlights Dashboard.
+- Filters: **Pair** (All pairs), **Result** (Any result / Pass / Fail / Timed out), **Test case**
+  text search.
+- Card header `Runs · 41` and a tally `Pass 22 · Fail 14 · Timed out 5` for the current filter.
+- Table as the Dashboard's plus **Duration**: When · Pair · Test case · Result · Latency p50 ·
+  Duration · Open. Paged (`1–25 of 41`, *Previous* / *Next*), newest first.
+
+### 3.11 Tools: FOM registry and CSV template
+- **FOM registry** — title + *Add a FOM* button (scrolls to / focuses the form). Left: *Registered
+  FOMs* table Name · HLA · Files · Contents (parse status; amber + reason when a file is missing) ·
+  **Used by** (`n pairs`, new), toolbar *Re-check all* / *Remove*. A FOM used by a pair cannot be
+  removed (footnote says so). Right: **Add a FOM** form — Name, HLA version toggle, then the
+  per-version files (REQ-01: `.fed` + required `.omt` for 1.3; FDD `.xml`, join modules, optional
+  MIM for Evolved), *Register* / *Clear*. Every *Add a FOM* link in the app lands here.
+- **CSV template** — unchanged behaviour: *From* FOM picker + class/interaction counts; class tree
+  with filter; attributes grid (include, Name, FOM datatype, Variant / elements, Resolved) with
+  *All* / *None*; *Generate*: rows to pre-create, default float tolerance (0.001 — the same default
+  §3.5 pre-fills), *Download template…*, *Preview template text* (shown inline below the buttons).
+
 ### 3.7 Removed
 - Connections tab as a top-level page (its editor becomes the pair editor, §5 T5).
 - *Import bridge profile…* and *Export profile* buttons (the CLI keeps `--profile`;
@@ -126,7 +170,7 @@ Sidebar:  Dashboard · Pairs  ……  Tools: CSV template · FOM registry  …�
   month names. Never-run shows `—`.
 
 ## 4. Success criteria
-- [ ] All six screens exist and match the canvas layout and copy (dark theme tokens, no hard-coded hex).
+- [ ] Every screen in §3 exists and matches its canvas board in layout and copy (dark theme tokens, no hard-coded hex).
 - [ ] A user can: create a pair → add a test case (pick class each side, fill or upload sheets) →
       save → run it from Pair details → see the result → open an older run of the same test case.
 - [ ] Every run is linked to its pair and test case in `btk.db`; the Dashboard, Pair details and
@@ -200,6 +244,8 @@ and the existing hash-based "test changed vs result changed" logic keeps working
 - Records: `PairRecord`, `TestCaseRecord`, `TestCaseSheet`. API: `Pairs()`, `SavePair`,
   `DeletePair`, `TestCases(pairId)`, `SaveTestCase(tc, sheets)` (single transaction),
   `DeleteTestCase`, `RunsOf(testCaseId, n)`, `RecentRuns(n)` gains pair/test-case names,
+  `Runs(pairId?, outcome?, text?, offset, limit)` + `RunTally(same filter)` for All results,
+  `FomUsage(fomId)` for the registry's *Used by* column and its remove guard,
   `BeginRun(..., pairId, testCaseId)`, `RunCount(pairId | testCaseId)` for the delete dialog.
 - **Delete is a hard delete including runs (D5).** UI: *Delete pair* (on Edit pair) and *Delete* on
   a test case row / in the editor, each behind a confirm dialog that states the cost:
@@ -211,10 +257,12 @@ and the existing hash-based "test changed vs result changed" logic keeps working
 **T2 · Shell: named navigation** (`MainWindow.xaml(.cs)`, new `Views/`)
 - Replace the positional Nav/Tabs with a `ContentControl` host and a tiny navigator:
   `Navigate(Page page, object arg)` where `Page` is an enum
-  (`Dashboard, Pairs, PairDetail, TestCaseEdit, TestCaseResult, CsvTemplate, FomRegistry`) and
+  (`Dashboard, Pairs, PairDetail, PairEdit, TestCaseEdit, TestCaseResult, AllResults, CsvTemplate,
+  FomRegistry`) and
   `arg` carries the id (pair / test case / run). Keep a back stack for breadcrumbs.
 - Split each screen into its own `UserControl` under `src/BrokerTestKit.Gui/Views/`
-  (`DashboardView`, `PairsView`, `PairDetailView`, `TestCaseEditView`, `TestCaseResultView`;
+  (`DashboardView`, `PairsView`, `PairDetailView`, `PairEditView`, `TestCaseEditView`,
+  `TestCaseResultView`, `AllResultsView`;
   move the existing template and registry tabs into `CsvTemplateView`, `FomRegistryView` **without
   behaviour changes**). This is also how `MainWindow.xaml.cs` stops being 1,300 lines.
 - Sidebar: `NavList` styles reused; Pairs item selected for every pair-scoped page.
@@ -233,9 +281,9 @@ and the existing hash-based "test changed vs result changed" logic keeps working
 - Pair details reads `TestCases(pairId)` + last run per test case + `RunsOf` for the pair.
 - *Run* / *Run all test cases*: queue test cases and run them one after another (§T7).
 
-**T5 · Pair editor** (*New pair* / *Edit pair*) — **built from this description, no canvas
-mock-up; reviewed in the running app** (D1). Match the other screens: breadcrumb, sidebar with
-Pairs selected, sticky Cancel / Save footer returning to Pair details (or Pairs for a new pair).
+**T5 · Pair editor** (*New pair* / *Edit pair*, `PairEditView`) — as §3.9 and the canvas boards
+*New / edit pair* and *Delete pair — confirm* (D1). Breadcrumb, sidebar with Pairs selected,
+sticky Delete / Cancel / Save footer returning to Pair details (or Pairs for a new pair).
 - Reuse today's Connections/Federations editor controls for each side (HLA version, FOM from
   registry, RTI bin, rid, assistant port, federation, join modules), laid out Send · A | Receive · B,
   plus pair name and advanced *Self-test*. Keep the existing checks: REQ-01 field switching,
@@ -266,7 +314,9 @@ Pairs selected, sticky Cancel / Save footer returning to Pair details (or Pairs 
 as §3.1. The banner is a `RigMonitor` (licence + TCP 5111 checks, §3.8) raising `Changed` on the
 Dispatcher; `RunService` asks it before starting. **Ships in the same change as the box** (R3).
 
-**T9 · Dashboard** — Library counts, Last run, last 10 runs, empty states (§3.2).
+**T9 · Dashboard + All results** — Library counts, Last run, last 10 runs, empty states (§3.2);
+`AllResultsView` with filters and paging (§3.10). Tools restyle (§3.11): *Used by* column and
+remove guard on the FOM registry; CSV template preview inline.
 
 **T10 · Docs** — rewrite REQ-10 for the new shell; note the pair/test-case model under REQ-03;
 update CLAUDE.md's GUI bullet ("5 tabs" → the new flow); DESIGN.md if the storage section names
@@ -280,7 +330,7 @@ tables.
 
 | # | Question | Decision | Lands in |
 |---|---|---|---|
-| D1 | New / Edit pair screen is not on the canvas | **Build from the PRP text** (T5), review in the running app | T5 |
+| D1 | New / Edit pair screen is not on the canvas | First answer: build from the PRP text. **Superseded the same day: drawn on the canvas** (New / edit pair + Delete confirm, §3.9) | §3.9, T5 |
 | D2 | Float tolerance: one per test case, or per field? | **Per field, on the Receive sheets** — a ± row under the float columns, backed by `# tolerance:` | §3.5, T6 |
 | D3 | Name of the A→B concept | **Pairs** (not Routes / Bridges) | all copy |
 | D4 | Where licence / broker status goes | **Warning banner, only when something is wrong** | §3.8, T8 |
