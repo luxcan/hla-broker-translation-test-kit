@@ -218,8 +218,6 @@ and the existing hash-based "test changed vs result changed" logic keeps working
   move the existing template and registry tabs into `CsvTemplateView`, `FomRegistryView` **without
   behaviour changes**). This is also how `MainWindow.xaml.cs` stops being 1,300 lines.
 - Sidebar: `NavList` styles reused; Pairs item selected for every pair-scoped page.
-- **Drop the uncommitted tab-reorder change** — it is superseded (or commit it first if a release
-  is cut before T2 lands).
 
 **T3 · Migration of existing data** (`Store.cs`, one-time, idempotent)
 - For every distinct `(conn_a, conn_b)` in `run`: create a pair named
