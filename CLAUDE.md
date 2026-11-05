@@ -50,7 +50,7 @@ them copied in before it builds or runs.
 - The harness is **independent** of the C++ broker (tests it as a black box).
 - **GUI = `src/BrokerTestKit.Gui`** (WPF, 5 tabs: FOM registry / Connections / CSV template /
   Test data / Run). Every run is saved as it happens; *History…* reopens it and *Export results…*
-  writes the same CSV as the CLI's `--report`. It holds no RTI connection - the agents are child processes. The CLI stays the CI entry
+  writes the same file as the CLI's `--report` (CSV, HTML or JUnit XML, by extension). It holds no RTI connection - the agents are child processes. The CLI stays the CI entry
   point (`entity`, `native`, `template`, `fom` modes).
 - **Custom attributes require the NATIVE agents**, not C#. The C# VR-Link binding has no FOM
   Mapper/encoder, so unmodelled attributes never reach the wire. `src/BrokerTestKit.AgentNative/`
@@ -72,7 +72,7 @@ them copied in before it builds or runs.
 - **The rig is DATA, not code** — `config/bridge-stock-rpr.profile` (`BridgeProfile.cs`) holds both
   sides: agent binary, RTI bin, rid, `RTI_ASSISTANT_PORT`, `RTI_CONFIG`, federation, FOM + join
   modules, HLA class. `BrokerTestKit.Cli.exe entity in.csv expected.csv --profile <file>` runs a
-  golden file over it (`--quiesce ms`, `--timeout s`, `--quiet`, `--report out.csv`). Two spellings
+  golden file over it (`--quiesce ms`, `--timeout s`, `--quiet`, `--report out.csv|.xml|.html`, repeatable; `.xml` is JUnit for CI). Two spellings
   of the class are deliberate: the CSV's `# class:` is what the FOM PARSER resolves against (bare
   `GroundVehicle`), `class=` in the profile is what the RTI knows (fully qualified). Generate test
   data of any size with `tests/gen-volume-csv.ps1 -Rows N`.

@@ -991,7 +991,8 @@ namespace BrokerTestKit.Cli
         /// </summary>
         private static int RunEntity(string[] args)
         {
-            string inPath = null, outPath = null, profilePath = null, reportPath = null;
+            string inPath = null, outPath = null, profilePath = null;
+            var reportPaths = new List<string>();
             bool selfTest = false, quiet = false;
             var opt = new RunOptions();
             var inv = System.Globalization.CultureInfo.InvariantCulture;
@@ -1002,7 +1003,7 @@ namespace BrokerTestKit.Cli
                 if (a == "--selftest") { selfTest = true; continue; }
                 if (a == "--quiet")    { quiet = true; continue; }
                 if (a == "--profile" && i + 1 < args.Length) { profilePath = args[++i]; continue; }
-                if (a == "--report"  && i + 1 < args.Length) { reportPath  = args[++i]; continue; }
+                if (a == "--report"  && i + 1 < args.Length) { reportPaths.Add(args[++i]); continue; }
                 if (a == "--quiesce" && i + 1 < args.Length)
                 { opt.Quiesce = TimeSpan.FromMilliseconds(double.Parse(args[++i], inv)); continue; }
                 if (a == "--timeout" && i + 1 < args.Length)
@@ -1017,7 +1018,7 @@ namespace BrokerTestKit.Cli
             {
                 Console.Error.WriteLine("usage: entity <input.csv> <output.csv> [--profile <file>] " +
                                         "[--selftest] [--quiesce ms] [--timeout s] [--abort-after N] " +
-                                        "[--report <file.csv>] [--quiet]");
+                                        "[--report <file.csv|.xml|.html>]... [--quiet]");
                 return 2;
             }
 
@@ -1132,7 +1133,7 @@ namespace BrokerTestKit.Cli
                 var runner = new NativeTestRunner(a, b, cfgA, cfgB, opt);
 
                 // At 4000 rows a line per row is unreadable, so --quiet keeps only the failures
-                // plus a heartbeat. Nothing is lost: --report writes every row to CSV regardless.
+                // plus a heartbeat. Nothing is lost: --report writes every row regardless.
                 int total = input.Count;
                 int lastBeat = 0;                 // Progress fires twice per row; beat once
                 var wall = System.Diagnostics.Stopwatch.StartNew();
@@ -1176,15 +1177,19 @@ namespace BrokerTestKit.Cli
                 Console.WriteLine("=========================================");
                 Console.WriteLine(report.Summary());
 
-                if (reportPath != null)
+                // --report may repeat; the extension picks the format (.xml JUnit, .html page, else CSV),
+                // so CI can take the JUnit file and a person the HTML from the same run.
+                var context = new[]
                 {
-                    RunReportCsv.Write(reportPath, report, new[]
-                    {
-                        "input    " + System.IO.Path.GetFullPath(inPath),
-                        "expected " + System.IO.Path.GetFullPath(outPath),
-                        "profile  " + (profilePath == null ? "(none)" : System.IO.Path.GetFullPath(profilePath)),
-                    });
-                    Console.WriteLine("report  " + System.IO.Path.GetFullPath(reportPath));
+                    "input    " + System.IO.Path.GetFullPath(inPath),
+                    "expected " + System.IO.Path.GetFullPath(outPath),
+                    "profile  " + (profilePath == null ? "(none)" : System.IO.Path.GetFullPath(profilePath)),
+                };
+                foreach (var rp in reportPaths)
+                {
+                    RunReportWriter.Write(rp, report, context, System.IO.Path.GetFileNameWithoutExtension(outPath));
+                    Console.WriteLine("report  " + System.IO.Path.GetFullPath(rp) +
+                                      "  (" + RunReportWriter.FormatFor(rp) + ")");
                 }
                 return report.AllPassed ? 0 : 1;
             }

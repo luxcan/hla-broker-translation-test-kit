@@ -137,10 +137,10 @@ Warn when a pass lands near the timeout (flakiness early-warning).
 
 ---
 
-## REQ-05 — Results & CI ✅ (CLI + GUI, CSV) / ⏳ (JUnit XML, HTML)
+## REQ-05 — Results & CI ✅
 
 Per-step Pass / Fail / Timeout with field-level diffs (`expected`, `actual`, `delta`, `tol`).
-Non-zero process exit on any failure so it can gate CI. *(To add: JUnit XML + HTML report.)*
+Non-zero process exit on any failure so it can gate CI.
 
 **Kept and exportable ✅ (2026-11-02).** Every GUI run is saved as it happens - one record per run,
 one per row, one per field compared - in the workspace's SQLite store, so a stopped, aborted or
@@ -156,7 +156,32 @@ values were wrong (the broker is alive and translating incorrectly); **Timeout**
 arrived at all (the broker is silent, or a subscription is wrong). Different defects, different
 first thing to check.
 
-Entry point: `BrokerTestKit.Cli.exe entity <input.csv> <expected.csv> --profile <file> [--report out.csv]`.
+**Three formats, one rule ✅ (2026-11-05).** The file extension picks the format, in the CLI and
+the GUI alike (`Engine/RunReportFormats.cs`, `RunReportWriter.Write`):
+
+| extension | format | for |
+|---|---|---|
+| `.xml` | **JUnit XML** | CI (Jenkins, GitLab, Azure DevOps). One `<testcase>` per row. |
+| `.html` / `.htm` | **HTML** | People. One self-contained page (no scripts, no external files): summary tiles, latency, run context, every row with failing rows expanded to their field diffs. Follows light/dark. |
+| anything else | **CSV** | Excel, diffs (as above). |
+
+JUnit keeps the Fail/Timeout distinction below: **Fail → `<failure type="Fail">`**, **Timeout →
+`<error type="Timeout">`**, so CI counts them apart. An aborted run (`--abort-after`) adds one
+synthetic `run aborted` test case with an `<error type="Aborted">`, otherwise a run that gave up
+after row 2 of 4000 would show green in CI while the CLI exits 1. Field results go to
+`<system-out>`; the run context and latency summary go to `<properties>`. The suite is named after
+the expected sheet.
+
+`--report` may repeat, so one run can write all three:
+`… --report run.xml --report run.html --report run.csv`. In the GUI, *Export results…* offers the
+three as file types.
+
+Verified on the WeaponFire self-test (RTI 5.0.1): all-pass (exit 0), two wrong parameters (one
+`<failure>` listing both diffs, exit 1), and A→B with no broker running and `--abort-after 2`
+(two `<error type="Timeout">` + `run aborted`, exit 1). The JUnit XML is well-formed. The GUI
+export path compiles but has not been clicked through.
+
+Entry point: `BrokerTestKit.Cli.exe entity <input.csv> <expected.csv> --profile <file> [--report out.csv|.xml|.html]...`.
 
 ---
 

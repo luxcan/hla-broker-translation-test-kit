@@ -970,13 +970,16 @@ namespace BrokerTestKit.Gui
 
             var dlg = new SaveFileDialog
             {
-                Filter = "CSV (*.csv)|*.csv|All files (*.*)|*.*",
-                FileName = "run-" + DateTime.Now.ToString("yyyyMMdd-HHmm", CultureInfo.InvariantCulture) + ".csv",
+                Filter = "CSV (*.csv)|*.csv|HTML report (*.html)|*.html|JUnit XML (*.xml)|*.xml",
+                FileName = "run-" + DateTime.Now.ToString("yyyyMMdd-HHmm", CultureInfo.InvariantCulture),
+                AddExtension = true,   // no extension in the default name, so the chosen filter supplies it
                 Title = "Export run results",
             };
             if (dlg.ShowDialog() != true) { Status("Not exported."); return; }
 
-            try { RunReportCsv.Write(dlg.FileName, _shownReport, _shownContext); }
+            // The dialog appends the chosen filter's extension, and the extension picks the format -
+            // the same rule as the CLI's --report.
+            try { RunReportWriter.Write(dlg.FileName, _shownReport, _shownContext, "Broker test run"); }
             catch (Exception ex) { Fail("Could not export the results", ex); return; }
             Status("Exported " + Path.GetFileName(dlg.FileName) + "  ·  " + _shownReport.Steps.Count + " row(s).");
         }

@@ -176,11 +176,12 @@ cd C:\MAK\vrexchange2.9\bin64
 start vrx.exe -l BTK-Bridge.xml -G
 
 BrokerTestKit.Cli.exe entity in.csv expected.csv --profile config\bridge-stock-rpr.profile ^
-    --quiesce 50 --timeout 15 --quiet --report run-report.csv
+    --quiesce 50 --timeout 15 --quiet --report run-report.csv --report run-report.xml --report run-report.html
 ```
 
 `--quiet` prints failures and a rows/s heartbeat instead of a line per row; `--report` writes
-every row's outcome to CSV regardless. Exit code is 0 only if every row passed.
+every row's outcome regardless, and may repeat: the extension picks the format (`.xml` = JUnit XML
+for CI, `.html` = a self-contained page, anything else = CSV). Exit code is 0 only if every row passed.
 
 `tests\gen-volume-csv.ps1 -Rows N` generates a matching input/expected pair of any size for this
 rig — useful for volume runs. Read its header before changing the values: the numbers are chosen
