@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Icon for HLAUnitTestingKit.
+Icon for the HLA Broker Translation Test Kit.
 
 The mark is a test report reduced to its verdict: one case passed, one failed.
 A tick and a cross say "this is a thing that judges other things" faster than

@@ -5,7 +5,7 @@ using BrokerTestKit.Engine;
 namespace BrokerTestKit.Cli
 {
     /// <summary>
-    /// Headless runner / prototype driver for the broker test kit.
+    /// Headless runner / prototype driver for the HLA Broker Translation Test Kit.
     ///
     ///   prp1  join + resign Federation A (HLA 1.3, RPR FOM 1.0)          [PASSING]
     ///   prp2  join BOTH federations in one process (A=1.3, B=Evolved)

@@ -73,7 +73,7 @@ Regenerate the templates from your own FOMs: register them in the GUI, then
 
 ```bat
 build-native.bat                 REM the two raw-RTI C++ agents
-msbuild HLAUnitTestingKit.sln -p:Configuration=Debug -p:Platform=x64
+msbuild HLABrokerTranslationTestKit.sln -p:Configuration=Debug -p:Platform=x64
 ```
 
 `/std:c++14` and `/DRTI_USES_STD_FSTREAM` are **mandatory** for the native agents — C++17 removed

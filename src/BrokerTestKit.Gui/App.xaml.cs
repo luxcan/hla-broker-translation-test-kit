@@ -12,7 +12,7 @@ namespace BrokerTestKit.Gui
             // as exceptions the user needs to READ.
             DispatcherUnhandledException += (s, args) =>
             {
-                MessageBox.Show(args.Exception.Message, "BrokerTestKit",
+                MessageBox.Show(args.Exception.Message, "HLA Broker Translation Test Kit",
                                 MessageBoxButton.OK, MessageBoxImage.Error);
                 args.Handled = true;
             };

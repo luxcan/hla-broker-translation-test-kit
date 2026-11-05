@@ -1,4 +1,4 @@
-# src — Broker Test Kit (code)
+# src — HLA Broker Translation Test Kit (code)
 
 See [../docs/DESIGN.md](../docs/DESIGN.md) for the design and
 [../docs/vr-link-knowledge.md](../docs/vr-link-knowledge.md) for the VR-Link API notes.
@@ -35,7 +35,7 @@ licensing, native-DLL/PATH setup, and `.fed`/RID resolution before anything else
 
 ### Build & run
 ```
-msbuild HLAUnitTestingKit.sln /p:Configuration=Debug /p:Platform=x64
+msbuild HLABrokerTranslationTestKit.sln /p:Configuration=Debug /p:Platform=x64
 src\BrokerTestKit.Cli\bin\x64\Debug\BrokerTestKit.Cli.exe
 ```
 Expected output ends with `JOINED.` → `drainInput x5 OK` → `RESIGNED (Dispose).`

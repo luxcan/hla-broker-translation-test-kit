@@ -1,4 +1,4 @@
-# HLA Broker Test Kit — Design Notes
+# HLA Broker Translation Test Kit — Design Notes
 
 > Status: **exploratory / pre-implementation.** This document records what we know
 > and the decisions still open. Update it as facts get confirmed.

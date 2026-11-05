@@ -4,7 +4,7 @@ Guidance for Claude Code when working in this repository.
 
 ## What this project is
 
-**HLAUnitTestingKit** — a GUI + CLI tool that **regression-tests a MAK VR-Exchange
+**HLA Broker Translation Test Kit** — a GUI + CLI tool that **regression-tests a MAK VR-Exchange
 broker** which translates between an **HLA 1.3** federation and an **HLA Evolved
 (IEEE 1516-2010)** federation. The tool joins both federations as federates: it pumps
 data into Federation A from an input CSV, lets the broker translate A→B, and verifies
@@ -12,7 +12,7 @@ what Federation B receives against an output CSV (golden-file black-box testing)
 
 Status: **working prototype.** Join, multi-process agents, IPC and the CSV golden-file
 runner all work end-to-end against MAK RTI 5.0.1 (see `docs/APP-REQUIREMENTS.md` for status
-per requirement). Under git: `github.com:luxcan/hla-unit-test-kit`, private. Commit straight to
+per requirement). Under git: `github.com:luxcan/hla-broker-translation-test-kit`, private. Commit straight to
 `main`. MAK licensed files (rids, FOMs, `vrLinkSharp.dll`) are gitignored, so a fresh clone needs
 them copied in before it builds or runs.
 

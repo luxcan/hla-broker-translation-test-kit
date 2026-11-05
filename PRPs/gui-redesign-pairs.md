@@ -361,7 +361,7 @@ tables.
 
 ```bat
 :: build (from the repo root, x64)
-msbuild HLAUnitTestingKit.sln -p:Configuration=Debug -p:Platform=x64
+msbuild HLABrokerTranslationTestKit.sln -p:Configuration=Debug -p:Platform=x64
 :: rig still proven end to end (CLI path untouched)
 powershell -ExecutionPolicy Bypass -File tests\native\run-bridge.ps1
 ```
