@@ -12,6 +12,17 @@
 
 ---
 
+> **Status 2026-11-05: built.** T1–T10 are done, with REQ-13 folded in: several classes per side,
+> run through `TestCaseRunner`. Deviations from the plan:
+> - `pair.conn_a`/`conn_b` are plain names, not foreign keys, so a migrated pair can name a
+>   removed connection and still open;
+> - a `run_part` table keeps per-class results;
+> - "Run" is blocked only when the licence daemon is down, and only warned about when the broker
+>   is down (a self-test pair needs no broker).
+>
+> Checklist items not yet exercised: 4 (Stop in the middle of a long run) and 7 (licence-down
+> blocking Run). See APP-REQUIREMENTS REQ-10.
+
 ## 1. Goal
 
 Replace the GUI's five positional tabs (FOM registry / Connections / Test data / Run / CSV template)
@@ -323,7 +334,7 @@ update CLAUDE.md's GUI bullet ("5 tabs" → the new flow); DESIGN.md if the stor
 tables.
 
 ### Out of scope (separate PRPs)
-- **REQ-13** multi-sheet test cases and cross-class correlation (schema above is ready for it).
+- ~~**REQ-13**~~ — done in the same change (APP-REQUIREMENTS REQ-13).
 - FOM-diff view; light theme; JUnit/HTML reports; persisting agent transcripts.
 
 ## 6. Decisions (answered by the owner, 2026-11-04)

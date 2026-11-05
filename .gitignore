@@ -65,6 +65,7 @@ config/*.xml
 
 # Test data and generated templates - carry FOM attribute names and offsets
 tests/*.csv
+tests/cases/
 tests/templates/
 
 # Native agent scripts - name the customised attributes and their byte values

@@ -110,6 +110,16 @@ match-or-timeout verification model in [DESIGN §9.1](../../docs/DESIGN.md) assu
 Sending per attribute would fragment one step into several reflects and make the
 B-side comparison racy.
 
+## HLA 1.3 specifics
+
+- ⚠️ **Attribute and parameter handles are only unique WITHIN a class.** In HLA 1.3 they are
+  small integers: `EmitterSystem`'s first attribute and `EmitterBeam`'s first attribute can both
+  be handle 1. The agent therefore maps names by `"<class label>#<handle>"`, never by handle
+  alone. Until 2026-11-05 it did map by handle alone, and declaring a second class renamed the
+  first one's attributes: `EmitterType` came back labelled as `EmitterBeam`'s attribute and the
+  parent reported it "not received". Single-class runs never noticed; multi-sheet test cases
+  (REQ-13) did at once. The Evolved agent is not affected, because 1516e handles are opaque objects.
+
 ## HLA Evolved specifics
 
 - Class names are normally **fully qualified**:

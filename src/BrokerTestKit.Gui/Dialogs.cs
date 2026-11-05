@@ -24,6 +24,13 @@ namespace BrokerTestKit.Gui
             return Show(owner, title, message, confirmText, "Cancel", destructive);
         }
 
+        /// <summary>As <see cref="Confirm"/>, with both buttons labelled - "Keep pair" / "Delete pair and 41 runs".</summary>
+        public static bool Confirm(Window owner, string title, string message, string confirmText, string cancelText,
+                                   bool destructive)
+        {
+            return Show(owner, title, message, confirmText, cancelText, destructive);
+        }
+
         /// <summary>Report something the user must read. Always returns false; there is only OK.</summary>
         public static void Inform(Window owner, string title, string message, bool isError = false)
         {

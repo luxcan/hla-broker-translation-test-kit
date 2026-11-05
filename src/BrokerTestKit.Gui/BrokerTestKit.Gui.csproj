@@ -80,6 +80,77 @@
     <Compile Include="Store.cs" />
     <Compile Include="Dialogs.cs" />
     <Compile Include="CsvGrid.cs" />
+    <Compile Include="Views\FomRegistryView.xaml.cs">
+      <DependentUpon>FomRegistryView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\CsvTemplateView.xaml.cs">
+      <DependentUpon>CsvTemplateView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\DashboardView.xaml.cs">
+      <DependentUpon>DashboardView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\PairsView.xaml.cs">
+      <DependentUpon>PairsView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\PairDetailView.xaml.cs">
+      <DependentUpon>PairDetailView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\PairEditView.xaml.cs">
+      <DependentUpon>PairEditView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\TestCaseEditView.xaml.cs">
+      <DependentUpon>TestCaseEditView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\TestCaseResultView.xaml.cs">
+      <DependentUpon>TestCaseResultView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\AllResultsView.xaml.cs">
+      <DependentUpon>AllResultsView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="StorePairs.cs" />
+    <Compile Include="AppServices.cs" />
+    <Compile Include="RunService.cs" />
+    <Compile Include="RigMonitor.cs" />
+    <Page Include="Views\FomRegistryView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Views\CsvTemplateView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Views\DashboardView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Views\PairsView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Views\PairDetailView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Views\PairEditView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Views\TestCaseEditView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Views\TestCaseResultView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Views\AllResultsView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Themes\Pages.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\BrokerTestKit.Engine\BrokerTestKit.Engine.csproj">

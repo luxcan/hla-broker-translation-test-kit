@@ -1,0 +1,84 @@
+<UserControl x:Class="BrokerTestKit.Gui.Views.TestCaseEditView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource FooterBar}">
+            <DockPanel>
+                <Button x:Name="DeleteButton" DockPanel.Dock="Left" Content="Delete test case…" Style="{StaticResource DangerButton}"
+                        Click="DeleteCase" Height="36" Visibility="Collapsed"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Cancel" Click="Cancel" Height="36"/>
+                    <Button x:Name="SaveButton" Content="Save test case" Style="{StaticResource AccentButton}" Click="Save"
+                            Height="36" Margin="0" MinWidth="130"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="32,22,32,24">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <Button Content="Pairs" Style="{StaticResource LinkButton}" Click="OpenPairs"/>
+                    <TextBlock Text="  /  " Style="{StaticResource Muted}" VerticalAlignment="Center"/>
+                    <Button x:Name="CrumbPair" Style="{StaticResource LinkButton}" Click="OpenPair"/>
+                    <TextBlock Text="  /  " Style="{StaticResource Muted}" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="CrumbHere" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock x:Name="Title" Style="{StaticResource PageTitle}"/>
+                <TextBlock x:Name="Lead" Style="{StaticResource PageLead}" MaxWidth="1000" HorizontalAlignment="Left" Margin="0,4,0,18"/>
+
+                <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="Details" Style="{StaticResource CardTitle}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <StackPanel Width="520" Margin="0,0,16,0">
+                                <Label Content="Name"/>
+                                <TextBox x:Name="CaseName" TextChanged="Dirty"/>
+                            </StackPanel>
+                            <StackPanel Width="160">
+                                <Label Content="Timeout per row (s)"/>
+                                <TextBox x:Name="Timeout" TextChanged="Dirty" ToolTip="How long B gets to show each row's expected state. Blank = 15 s."/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource Card}" VerticalAlignment="Top">
+                        <StackPanel>
+                            <DockPanel>
+                                <TextBlock x:Name="SendWhere" DockPanel.Dock="Right" Style="{StaticResource Muted}" VerticalAlignment="Bottom"/>
+                                <TextBlock Text="Send" Style="{StaticResource CardTitle}"/>
+                            </DockPanel>
+                            <WrapPanel x:Name="SendChips" Margin="0,10,0,4"/>
+                            <StackPanel x:Name="SendSheets"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top">
+                        <StackPanel>
+                            <DockPanel>
+                                <TextBlock x:Name="ReceiveWhere" DockPanel.Dock="Right" Style="{StaticResource Muted}" VerticalAlignment="Bottom"/>
+                                <TextBlock Text="Receive" Style="{StaticResource CardTitle}"/>
+                            </DockPanel>
+                            <WrapPanel x:Name="ReceiveChips" Margin="0,10,0,4"/>
+                            <StackPanel x:Name="ReceiveSheets"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <TextBlock Margin="0,14,0,0" Style="{StaticResource Muted}">
+                    <Run Text="&#xE7BA;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource OutcomeWarnText}"/>
+                    <Run Text="  Edit here rather than in Excel — Excel strips the leading zeros from hex ids and can turn values into dates."/>
+                </TextBlock>
+                <TextBlock Margin="0,6,0,0" Style="{StaticResource Muted}"
+                           Text="Rows with the same entityId on Send and Receive are one step. A cell like @1:1:101 is a reference: the RTI name of that row's object on the same side - on B, the object that matched it (REQ-13)."/>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

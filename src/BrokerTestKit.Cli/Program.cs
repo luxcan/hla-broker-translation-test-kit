@@ -44,6 +44,7 @@ namespace BrokerTestKit.Cli
                     case "native": return RunNative(args);
                     case "fom": return RunFom(args);
                     case "entity": return RunEntity(args);
+                    case "case": return RunCase(args);
                     case "template": return RunTemplate(args);
                     default:
                         Console.Error.WriteLine("Unknown mode '" + mode + "'. Use: prp1..prp6 | run | native | listen | publish");
@@ -1188,6 +1189,152 @@ namespace BrokerTestKit.Cli
                 foreach (var rp in reportPaths)
                 {
                     RunReportWriter.Write(rp, report, context, System.IO.Path.GetFileNameWithoutExtension(outPath));
+                    Console.WriteLine("report  " + System.IO.Path.GetFullPath(rp) +
+                                      "  (" + RunReportWriter.FormatFor(rp) + ")");
+                }
+                return report.AllPassed ? 0 : 1;
+            }
+        }
+
+        /// <summary>
+        /// case &lt;file.testcase&gt; [--profile &lt;file&gt; | --selftest] [--quiesce ms] [--timeout s]
+        ///      [--abort-after N] [--report out.csv|.xml|.html]... [--quiet]
+        ///
+        /// A multi-sheet test case (REQ-13): N Send sheets on A, M Receive sheets on B, one step per
+        /// entity group, and a verdict that waits for every expected class.
+        /// </summary>
+        private static int RunCase(string[] args)
+        {
+            string casePath = null, profilePath = null;
+            var reportPaths = new List<string>();
+            bool selfTest = false, quiet = false;
+            var opt = new RunOptions();
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+
+            for (int i = 1; i < args.Length; i++)
+            {
+                var a = args[i];
+                if (a == "--selftest") { selfTest = true; continue; }
+                if (a == "--quiet")    { quiet = true; continue; }
+                if (a == "--profile" && i + 1 < args.Length) { profilePath = args[++i]; continue; }
+                if (a == "--report"  && i + 1 < args.Length) { reportPaths.Add(args[++i]); continue; }
+                if (a == "--quiesce" && i + 1 < args.Length)
+                { opt.Quiesce = TimeSpan.FromMilliseconds(double.Parse(args[++i], inv)); continue; }
+                if (a == "--timeout" && i + 1 < args.Length)
+                { opt.Timeout = TimeSpan.FromSeconds(double.Parse(args[++i], inv)); continue; }
+                if (a == "--abort-after" && i + 1 < args.Length)
+                { opt.AbortAfterConsecutiveTimeouts = int.Parse(args[++i], inv); continue; }
+                if (a.StartsWith("--")) continue;
+                if (casePath == null) casePath = a;
+            }
+            if (casePath == null)
+            {
+                Console.Error.WriteLine("usage: case <file.testcase> [--profile <file> | --selftest] [--quiesce ms] " +
+                                        "[--timeout s] [--abort-after N] [--report <file.csv|.xml|.html>]... [--quiet]");
+                return 2;
+            }
+            if (selfTest && profilePath != null)
+            {
+                Console.Error.WriteLine("--selftest and --profile are mutually exclusive: a profile " +
+                                        "already says which two federations to use.");
+                return 2;
+            }
+
+            BridgeProfile profile = profilePath == null ? null : BridgeProfile.Load(Resolve(profilePath));
+            if (profile != null)
+            {
+                Console.WriteLine(profile.Describe());
+                Console.WriteLine();
+                if (!string.IsNullOrEmpty(profile.A.Class) || !string.IsNullOrEmpty(profile.B.Class))
+                    Console.WriteLine("note: the profile's class= override is ignored for a test case - " +
+                                      "every sheet names its own class.");
+            }
+
+            var agentA = FindNativeAgent(profile != null ? profile.A.Agent : "btk-agent13.exe");
+            var agentB = selfTest ? agentA
+                                  : FindNativeAgent(profile != null ? profile.B.Agent : "btk-agent1516e.exe");
+            var fomA = FomLoader.Load(profile != null ? profile.A.Fom : Resolve("BTK-CustomRPR1.omt"));
+            var fomB = selfTest ? fomA
+                                : FomLoader.Load(profile != null ? profile.B.Fom : Resolve("BTK-CustomRPR2.xml"));
+            Console.WriteLine("FOM A  " + fomA.Summary());
+            Console.WriteLine("FOM B  " + fomB.Summary());
+            Console.WriteLine();
+
+            var tc = TestCase.Load(casePath, fomA, fomB);
+            Console.WriteLine(tc.Describe());
+            Console.WriteLine();
+            Console.WriteLine(string.Format(inv, "run options: quiesce={0:F0}ms  timeout={1:F1}s  abort-after={2}",
+                opt.Quiesce.TotalMilliseconds, opt.Timeout.TotalSeconds,
+                opt.AbortAfterConsecutiveTimeouts > 0
+                    ? opt.AbortAfterConsecutiveTimeouts + " consecutive timeouts" : "never"));
+            Console.WriteLine();
+
+            NativeSideConfig cfgA, cfgB;
+            IDictionary<string, string> envA = null, envB = null;
+            if (profile != null)
+            {
+                // Class fields are per sheet in a test case; only the join parameters are used.
+                cfgA = profile.A.ToSideConfig(agentA, null, null, false);
+                cfgB = profile.B.ToSideConfig(agentB, null, null, false);
+                envA = profile.A.Environment(profile.Licence);
+                envB = profile.B.Environment(profile.Licence);
+            }
+            else
+            {
+                cfgA = new NativeSideConfig
+                {
+                    Label = "A", AgentExe = agentA,
+                    FederationName = selfTest ? "BTK-Loopback" : "BTK-FedA",
+                    FederateName = "BtkRunnerA", FederateType = "Harness", FedFile = "BTK-CustomRPR1.fed",
+                };
+                cfgB = new NativeSideConfig
+                {
+                    Label = "B", AgentExe = agentB,
+                    FederationName = selfTest ? "BTK-Loopback" : "BTK-FedB",
+                    FederateName = "BtkRunnerB", FederateType = "Harness",
+                    FedFile = selfTest ? "BTK-CustomRPR1.fed" : "BTK-CustomRPR2.xml",
+                };
+            }
+
+            using (var a = new NativeAgentHost("A", cfgA.AgentExe, "", envA))
+            using (var b = new NativeAgentHost("B", cfgB.AgentExe, "", envB))
+            {
+                var runner = new TestCaseRunner(a, b, cfgA, cfgB, opt);
+                runner.Progress += (step, msg) =>
+                {
+                    var bad = msg.StartsWith("Fail") || msg.StartsWith("Timeout") || msg.StartsWith("ABORT");
+                    if (!quiet || bad || step == 0) Console.WriteLine("  [step " + step + "] " + msg);
+                };
+
+                runner.Prepare(tc);
+                Console.WriteLine();
+                var report = runner.Run(tc);
+
+                Console.WriteLine();
+                Console.WriteLine("================ RESULTS ================");
+                foreach (var st in report.Steps)
+                {
+                    if (quiet && st.Outcome == Outcome.Pass) continue;
+                    Console.WriteLine(st.ToString());
+                    foreach (var p in st.Parts) Console.WriteLine("      " + p);
+                    foreach (var f in st.Fields) if (!quiet || !f.Ok) Console.WriteLine("        " + f);
+                }
+                Console.WriteLine("=========================================");
+                Console.WriteLine(report.Summary());
+
+                var context = new List<string>
+                {
+                    "testcase " + tc.ManifestPath,
+                    "profile  " + (profilePath == null ? (selfTest ? "(self-test loopback)" : "(none)")
+                                                       : System.IO.Path.GetFullPath(profilePath)),
+                };
+                foreach (var s in tc.AllSheets)
+                    context.Add((s.IsSend ? "send     " : "receive  ") + s.Side + " " + s.ClassName + "  " +
+                                System.IO.Path.GetFullPath(s.Sheet.SourceFile));
+
+                foreach (var rp in reportPaths)
+                {
+                    RunReportWriter.Write(rp, report, context, tc.Name);
                     Console.WriteLine("report  " + System.IO.Path.GetFullPath(rp) +
                                       "  (" + RunReportWriter.FormatFor(rp) + ")");
                 }

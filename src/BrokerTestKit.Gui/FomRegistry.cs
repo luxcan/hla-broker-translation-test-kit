@@ -51,6 +51,11 @@ namespace BrokerTestKit.Gui
         public string Status { get { return _status; } set { _status = value; Raise("Status"); } }
         public bool Ok { get { return _ok; } set { _ok = value; Raise("Ok"); } }
 
+        private int _usedBy;
+        /// <summary>How many pairs use this FOM - set by the registry screen; a used FOM cannot be removed.</summary>
+        public int UsedBy { get { return _usedBy; } set { _usedBy = value; Raise("UsedBy"); Raise("UsedByText"); } }
+        public string UsedByText { get { return _usedBy == 0 ? "—" : _usedBy + (_usedBy == 1 ? " pair" : " pairs"); } }
+
         /// <summary>Populated by <see cref="FomRegistry.Validate"/>; null until it parses.</summary>
         public FomModel Model;
 

@@ -90,6 +90,17 @@ namespace BrokerTestKit.Engine
             new Dictionary<string, NativeObject>(StringComparer.Ordinal);
         private readonly List<NativeInteraction> _interactions = new List<NativeInteraction>();
 
+        /// <summary>
+        /// Handle -&gt; instance name, kept across <see cref="ClearObserved"/>.
+        ///
+        /// DISC arrives once per object for the life of the federation. Quiescing clears the
+        /// object table, so an object updated again in a later step came back from its ATTR line
+        /// with NO instance name - and the instance name is exactly what an RPR reference
+        /// attribute (RTIobjectId) points at (REQ-13). Remember it here instead.
+        /// </summary>
+        private readonly Dictionary<string, string> _names =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
         public string Label { get; private set; }
         public string ExePath { get; private set; }
 
@@ -339,6 +350,7 @@ namespace BrokerTestKit.Engine
                 o.ClassName = Val(kv, "class");
                 o.InstanceName = Val(kv, "name");
                 o.LastSeenUtc = DateTime.UtcNow;
+                if (o.InstanceName.Length > 0) _names[obj] = o.InstanceName;
             }
         }
 
@@ -357,7 +369,13 @@ namespace BrokerTestKit.Engine
                 NativeObject o;
                 if (!_objects.TryGetValue(obj, out o))
                 {
-                    o = new NativeObject { Handle = obj, ClassName = Val(kv, "class") };
+                    string known;
+                    o = new NativeObject
+                    {
+                        Handle = obj,
+                        ClassName = Val(kv, "class"),
+                        InstanceName = _names.TryGetValue(obj, out known) ? known : null,
+                    };
                     _objects[obj] = o;
                 }
                 o.Attributes[name] = value;
@@ -370,7 +388,7 @@ namespace BrokerTestKit.Engine
             var kv = Kv(line, 5);
             string obj;
             if (!kv.TryGetValue("obj", out obj)) return;
-            lock (_gate) _objects.Remove(obj);
+            lock (_gate) { _objects.Remove(obj); _names.Remove(obj); }
         }
 
         /// <summary>An INT line opens a new interaction; the PARAM lines that follow fill it.</summary>

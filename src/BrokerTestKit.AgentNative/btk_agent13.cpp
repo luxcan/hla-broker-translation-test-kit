@@ -68,7 +68,13 @@ static std::string          g_exec;
 static std::map<std::string, RTI::ObjectClassHandle> g_classH;   // "BaseEntity"      -> handle
 static std::map<RTI::ObjectClassHandle, std::string> g_classN;   // handle            -> "BaseEntity"
 static std::map<std::string, RTI::AttributeHandle>   g_attrH;    // "BaseEntity::Foo" -> handle
-static std::map<RTI::AttributeHandle, std::string>   g_attrN;    // handle            -> "Foo"
+static std::map<RTI::AttributeHandle, std::string>   g_attrN;    // handle            -> "Foo" (fallback only)
+// HLA 1.3 attribute and parameter handles are small integers unique only WITHIN a class: the
+// first attribute of EmitterSystem and the first of EmitterBeam can both be handle 1. Keyed by
+// handle alone, declaring a second class renamed the first class's attributes, and the parent
+// then saw EmitterType arrive as "BeamIdentifier" - i.e. not at all (REQ-13, multi-class runs).
+// So the authoritative map is keyed by "<class label>#<handle>".
+static std::map<std::string, std::string>            g_attrNK;   // "Label#3"         -> "Foo"
 
 /// An object instance we registered and own the attributes of.
 struct Owned {
@@ -123,7 +129,8 @@ static std::deque<ProvideReq> g_provideQ;
 static std::map<std::string, RTI::InteractionClassHandle> g_intH;     // label -> handle
 static std::map<RTI::InteractionClassHandle, std::string> g_intN;     // handle -> label
 static std::map<std::string, RTI::ParameterHandle>        g_paramH;   // "Label::Param" -> handle
-static std::map<RTI::ParameterHandle, std::string>        g_paramN;   // handle -> param name
+static std::map<RTI::ParameterHandle, std::string>        g_paramN;   // handle -> param name (fallback)
+static std::map<std::string, std::string>                 g_paramNK;  // "Label#3" -> param name
 
 /// Staged parameter values, per interaction label, flushed by SENDINT.
 static std::map<std::string, std::map<RTI::ParameterHandle, Bytes> > g_pendingInt;
@@ -155,8 +162,10 @@ static std::string classNameOf(RTI::ObjectClassHandle h)
 
 /// Attribute names come from what we resolved at CLASS time. An unknown handle means the RTI
 /// sent us an attribute we never subscribed to - report the raw handle rather than guessing.
-static std::string attrNameOf(RTI::AttributeHandle h)
+static std::string attrNameOf(const std::string& classLabel, RTI::AttributeHandle h)
 {
+    std::map<std::string, std::string>::const_iterator k = g_attrNK.find(classLabel + "#" + U(h));
+    if (k != g_attrNK.end()) return k->second;
     std::map<RTI::AttributeHandle, std::string>::const_iterator it = g_attrN.find(h);
     return it != g_attrN.end() ? it->second : ("#" + U(h));
 }
@@ -180,6 +189,7 @@ static RTI::AttributeHandle attrHandle(const std::string& className, const std::
     RTI::AttributeHandle ah = rti().getAttributeHandle(attr.c_str(), c->second);
     g_attrH[key] = ah;
     g_attrN[ah]  = attr;
+    g_attrNK[className + "#" + U(ah)] = attr;
     return ah;
 }
 
@@ -189,8 +199,10 @@ static std::string intNameOf(RTI::InteractionClassHandle h)
     return it != g_intN.end() ? it->second : ("#" + U(h));
 }
 
-static std::string paramNameOf(RTI::ParameterHandle h)
+static std::string paramNameOf(const std::string& label, RTI::ParameterHandle h)
 {
+    std::map<std::string, std::string>::const_iterator k = g_paramNK.find(label + "#" + U(h));
+    if (k != g_paramNK.end()) return k->second;
     std::map<RTI::ParameterHandle, std::string>::const_iterator it = g_paramN.find(h);
     return it != g_paramN.end() ? it->second : ("#" + U(h));
 }
@@ -214,7 +226,7 @@ static void storeReflect(RTI::ObjectHandle obj, const RTI::AttributeHandleValueP
         // Raw bytes straight out to the parent. No interpretation, no FOM.
         btk::say("ATTR obj=" + U(obj) +
                  " class=" + s.className +
-                 " name="  + attrNameOf(h) +
+                 " name="  + attrNameOf(s.className, h) +
                  " len="   + U(len) +
                  " hex="   + btk::toHex(b));
     }
@@ -234,7 +246,7 @@ static void storeInteraction(RTI::InteractionClassHandle cls,
         if (len && p) std::memcpy(&b[0], p, len);
 
         btk::say("PARAM class=" + name +
-                 " name=" + paramNameOf(ps.getHandle(i)) +
+                 " name=" + paramNameOf(name, ps.getHandle(i)) +
                  " len="  + U(len) +
                  " hex="  + btk::toHex(b));
     }
@@ -400,6 +412,7 @@ static void cmdClass(const Kv& kv)
             }
             g_attrH[label + "::" + list[i]] = ah;
             g_attrN[ah] = list[i];
+            g_attrNK[label + "#" + U(ah)] = list[i];
             set->add(ah);
         }
 
@@ -543,6 +556,7 @@ static void cmdIntClass(const Kv& kv)
         }
         g_paramH[label + "::" + list[i]] = ph;
         g_paramN[ph] = list[i];
+        g_paramNK[label + "#" + U(ph)] = list[i];
     }
 
     if (mode == "pub" || mode == "pubsub") rti().publishInteractionClass(ch);
@@ -564,6 +578,7 @@ static RTI::ParameterHandle paramHandle(const std::string& label, const std::str
     RTI::ParameterHandle ph = rti().getParameterHandle(param.c_str(), c->second);
     g_paramH[key] = ph;
     g_paramN[ph]  = param;
+    g_paramNK[label + "#" + U(ph)] = param;
     return ph;
 }
 
@@ -625,7 +640,7 @@ static void cmdSnapshot()
         {
             btk::say("ATTR obj=" + U(s->first) +
                      " class=" + s->second.className +
-                     " name="  + attrNameOf(a->first) +
+                     " name="  + attrNameOf(s->second.className, a->first) +
                      " len="   + U(a->second.size()) +
                      " hex="   + btk::toHex(a->second));
         }

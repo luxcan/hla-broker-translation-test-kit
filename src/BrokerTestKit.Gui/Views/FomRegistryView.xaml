@@ -1,0 +1,105 @@
+<UserControl x:Class="BrokerTestKit.Gui.Views.FomRegistryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="32,26,32,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <DockPanel Margin="0,0,0,18">
+            <Button DockPanel.Dock="Right" Content="Add a FOM" Style="{StaticResource AccentButton}"
+                    Click="FocusForm" VerticalAlignment="Top"/>
+            <StackPanel>
+                <TextBlock Text="FOM registry" Style="{StaticResource PageTitle}"/>
+                <TextBlock Style="{StaticResource PageLead}" MaxWidth="900" HorizontalAlignment="Left"
+                           Text="Register each FOM once and pairs refer to it by name. Files are parsed and checked the moment you register, so a missing .omt or a malformed FDD shows up here rather than halfway through a run."/>
+            </StackPanel>
+        </DockPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="400"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource Card}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Registered FOMs" Style="{StaticResource CardTitle}" Margin="0,0,0,10"/>
+                    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Muted}" Margin="0,8,0,0"
+                               Text="A FOM used by a pair cannot be removed - change or delete the pair first."/>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button Content="Re-check all" Click="RecheckAll"/>
+                        <Button Content="Remove" Click="RemoveFom"/>
+                    </StackPanel>
+                    <DataGrid x:Name="FomList" Style="{StaticResource ListGrid}" SelectionChanged="FomSelected">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="1.4*"/>
+                            <DataGridTextColumn Header="HLA" Binding="{Binding Version}" Width="Auto"/>
+                            <DataGridTextColumn Header="Files" Binding="{Binding Files}" Width="1.5*"/>
+                            <DataGridTextColumn Header="Contents" Binding="{Binding Status}" Width="1.8*"/>
+                            <DataGridTextColumn Header="Used by" Binding="{Binding UsedByText}" Width="80"/>
+                        </DataGrid.Columns>
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Ok}" Value="False">
+                                        <Setter Property="Background" Value="{DynamicResource OutcomeWarnRow}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
+                    </DataGrid>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource Card}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="Add a FOM" Style="{StaticResource CardTitle}"/>
+                        <Label Content="Name"/>
+                        <TextBox x:Name="FName"/>
+
+                        <Label Content="HLA version"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
+                            <RadioButton x:Name="F13" Content="HLA 1.3" IsChecked="True" GroupName="FVer"
+                                         Margin="0,0,18,0" Checked="FomVersionChanged"/>
+                            <RadioButton x:Name="F1516" Content="HLA Evolved" GroupName="FVer" Checked="FomVersionChanged"/>
+                        </StackPanel>
+
+                        <Label x:Name="FStructLabel" Content="FED (.fed)  — what the RTI joins with"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseStruct" MinWidth="80" Margin="6,0,0,0"/>
+                            <TextBox x:Name="FStruct"/>
+                        </DockPanel>
+
+                        <StackPanel x:Name="FOmtRow">
+                            <Label Content="OMT (.omt)  — REQUIRED: the .fed has no datatypes"/>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseOmt" MinWidth="80" Margin="6,0,0,0"/>
+                                <TextBox x:Name="FOmt"/>
+                            </DockPanel>
+                        </StackPanel>
+
+                        <StackPanel x:Name="FEvolvedRows" Visibility="Collapsed">
+                            <Label Content="Join modules (comma separated — merged at JOIN)"/>
+                            <TextBox x:Name="FModules"/>
+                            <Label Content="MIM (optional)"/>
+                            <TextBox x:Name="FMim"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                            <Button Content="Register" Click="RegisterFom" Style="{StaticResource AccentButton}" MinWidth="110"/>
+                            <Button Content="Clear" Click="ClearFomForm"/>
+                        </StackPanel>
+
+                        <Border x:Name="FResultBox" Margin="0,14,0,0" Style="{StaticResource InsetCard}" Visibility="Collapsed">
+                            <TextBlock x:Name="FResult" TextWrapping="Wrap" FontSize="12"/>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

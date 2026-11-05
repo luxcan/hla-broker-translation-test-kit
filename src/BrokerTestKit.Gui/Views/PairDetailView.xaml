@@ -1,0 +1,135 @@
+<UserControl x:Class="BrokerTestKit.Gui.Views.PairDetailView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="32,22,32,32">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <Button Content="Pairs" Style="{StaticResource LinkButton}" Click="OpenPairs"/>
+                <TextBlock Text="  /  " Style="{StaticResource Muted}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="Crumb" VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <DockPanel Margin="0,0,0,18">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                    <Button Content="Edit pair" Click="EditPair"/>
+                    <Button x:Name="RunAllButton" Content="Run all test cases" Click="RunAll"/>
+                    <Button Content="+ Add test case" Style="{StaticResource AccentButton}" Click="AddTestCase" Margin="0"/>
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock x:Name="Title" Style="{StaticResource PageTitle}"/>
+                    <TextBlock x:Name="Sub" Style="{StaticResource PageLead}"/>
+                </StackPanel>
+            </DockPanel>
+
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="SEND · A" Style="{StaticResource Overline}"/>
+                        <TextBlock x:Name="AFom" Style="{StaticResource CardTitle}" Margin="0,6,0,2" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="AWhat" Style="{StaticResource Muted}"/>
+                        <TextBlock x:Name="AFed" Style="{StaticResource Muted}"/>
+                    </StackPanel>
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0">
+                    <TextBlock x:Name="BrokerText" Text="VR-Exchange" Style="{StaticResource Muted}" HorizontalAlignment="Center"/>
+                    <TextBlock Text="→" FontSize="22" HorizontalAlignment="Center" Foreground="{DynamicResource AccentBackground}"/>
+                </StackPanel>
+                <Border Grid.Column="2" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="RECEIVE · B" Style="{StaticResource Overline}"/>
+                        <TextBlock x:Name="BFom" Style="{StaticResource CardTitle}" Margin="0,6,0,2" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="BWhat" Style="{StaticResource Muted}"/>
+                        <TextBlock x:Name="BFed" Style="{StaticResource Muted}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <TextBlock x:Name="Problem" Style="{StaticResource Muted}" Foreground="{DynamicResource ValidationError}"
+                       Margin="0,0,0,12" Visibility="Collapsed"/>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="Test cases" Style="{StaticResource CardTitle}" Margin="0,0,0,10"/>
+                    <DataGrid x:Name="CasesGrid" Style="{StaticResource ListGrid}" RowHeight="40">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Name" Width="1.5*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="8,0" VerticalAlignment="Center">
+                                            <Button Content="{Binding Name}" Style="{StaticResource LinkButton}" Click="OpenResult"/>
+                                            <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" Foreground="{DynamicResource OutcomeWarnText}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Send → Receive" Binding="{Binding Classes}" Width="1.6*"/>
+                            <DataGridTextColumn Header="Rows" Binding="{Binding Rows}" Width="60"/>
+                            <DataGridTemplateColumn Header="Last result" Width="150">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding LastResult}" Tag="{Binding LastTag}" Style="{StaticResource ResultLabel}"
+                                                   VerticalAlignment="Center" Margin="8,0"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Actions" Width="170">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="8,0">
+                                            <Button Content="Edit" Style="{StaticResource LinkButton}" Click="EditCase" Margin="0,0,14,0"/>
+                                            <Button Content="Run" Style="{StaticResource LinkButton}" Click="RunCase" Margin="0,0,14,0"/>
+                                            <Button Content="Delete" Style="{StaticResource LinkButton}" Click="DeleteCase"
+                                                    Foreground="{DynamicResource ValidationError}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <TextBlock x:Name="NoCases" Style="{StaticResource Muted}" Margin="0,8,0,0" Visibility="Collapsed"
+                               Text="No test cases yet. A test case is one behaviour to check: what you Send on A, and what B must Receive."/>
+                    <Button Content="+ Add test case" Style="{StaticResource LinkButton}" Click="AddTestCase" Margin="0,12,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <DockPanel Margin="0,0,0,10">
+                        <Button DockPanel.Dock="Right" Content="All results" Style="{StaticResource LinkButton}" Click="OpenAllResults"/>
+                        <TextBlock Text="Recent runs" Style="{StaticResource CardTitle}"/>
+                    </DockPanel>
+                    <DataGrid x:Name="RunsGrid" Style="{StaticResource ListGrid}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="When" Binding="{Binding When}" Width="130"/>
+                            <DataGridTextColumn Header="Test case" Binding="{Binding TestCaseDisplay}" Width="1.5*"/>
+                            <DataGridTemplateColumn Header="Result" Width="150">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding ResultText}" Tag="{Binding Result}" Style="{StaticResource ResultLabel}"
+                                                   VerticalAlignment="Center" Margin="8,0"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Latency p50" Binding="{Binding LatencyText}" Width="100"/>
+                            <DataGridTextColumn Header="Duration" Binding="{Binding Duration}" Width="90"/>
+                            <DataGridTemplateColumn Header="" Width="70">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="Open" Style="{StaticResource LinkButton}" Click="OpenRun" Margin="8,0"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <TextBlock x:Name="NoRuns" Style="{StaticResource Muted}" Margin="0,8,0,0" Visibility="Collapsed"
+                               Text="Nothing run yet."/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

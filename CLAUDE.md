@@ -48,10 +48,17 @@ them copied in before it builds or runs.
   `…ObjDiscoveryMessage` / `…ObjRemovedMessage` / `UniversalHlaInteractionMessage` +
   `ExerciseConnection.addMessageHandler`/`sendMessage`) — FOM-agnostic, by-name, raw `byte[]`.
 - The harness is **independent** of the C++ broker (tests it as a black box).
-- **GUI = `src/BrokerTestKit.Gui`** (WPF, 5 tabs: FOM registry / Connections / CSV template /
-  Test data / Run). Every run is saved as it happens; *History…* reopens it and *Export results…*
-  writes the same file as the CLI's `--report` (CSV, HTML or JUnit XML, by extension). It holds no RTI connection - the agents are child processes. The CLI stays the CI entry
-  point (`entity`, `native`, `template`, `fom` modes).
+- **GUI = `src/BrokerTestKit.Gui`** (WPF): Dashboard → Pairs → Pair details → Add / edit test
+  case → Test case result, plus Tools (CSV template, FOM registry). Pairs and test cases are saved
+  in `btk.db`; test-case sheets are content-addressed assets; GUI runs go through
+  `TestCaseRunner`, the same as the CLI's `case` mode. Each screen is a `UserControl` in `Views/`
+  with name-based navigation (`Page` enum, never an index). The run thread lives in
+  `RunService.cs` and the licence/broker banner in `RigMonitor.cs`. Every run is saved as it
+  happens, and *Export results…* writes CSV, HTML or JUnit XML (by extension). It holds no RTI
+  connection - the agents are child processes. The CLI stays the CI entry point (`entity`, `case`,
+  `native`, `template`, `fom` modes). See REQ-10 and `PRPs/gui-redesign-pairs.md`.
+  ⚠️ The app-wide implicit `TextBlock` style overrides an inherited Foreground: a button template
+  must re-point it (see `LinkButton` in `Themes/Pages.xaml`), or link and danger text renders white.
 - **Custom attributes require the NATIVE agents**, not C#. The C# VR-Link binding has no FOM
   Mapper/encoder, so unmodelled attributes never reach the wire. `src/BrokerTestKit.AgentNative/`
   holds two raw-RTI C++ agents that move exact bytes by name: `btk-agent13.exe` (HLA 1.3) and
@@ -76,6 +83,13 @@ them copied in before it builds or runs.
   of the class are deliberate: the CSV's `# class:` is what the FOM PARSER resolves against (bare
   `GroundVehicle`), `class=` in the profile is what the RTI knows (fully qualified). Generate test
   data of any size with `tests/gen-volume-csv.ps1 -Rows N`.
+- **Multi-sheet test cases (REQ-13)** — `BrokerTestKit.Cli.exe case <file.testcase> --profile <file>`
+  (or `--selftest`). A `.testcase` manifest lists `send:` sheets (A) and `receive:` sheets (B). Rows
+  group into one step per entity, and `@<entityId>` cells check RTIobjectId references against the
+  object that matched on B. Loopback proof: `tests/cases/emitter-loopback/`; across the broker:
+  `tests/cases/shooter-bridge/` (both gitignored). The GUI builds the same test cases.
+- ⚠️ **A native agent's JOIN that hangs ~30 s is usually the licence**, not the FOM: right after
+  the dongle goes in, `maklmgrd` stays down until `lmutil lmreread`.
 - **Variant records expand on request** — `template … --variant Spatial=DRM_FPW` writes a
   `# variant:` directive and turns RPR 2.0's `Spatial` from one hex blob into eleven values at the
   offsets the FOM implies. Opt-in: name nothing and the column stays hex, so old sheets still pass.

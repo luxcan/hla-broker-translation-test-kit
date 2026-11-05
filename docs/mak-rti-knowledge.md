@@ -274,6 +274,20 @@ static init, before `main()` can set `RTI_RID_FILE`. Construct it lazily.
 - Exhaustion appears as FlexNet `-4,132 "Licensed number of users already reached"`.
 - A vendor-daemon failure appears as `-97`. Seen twice; once fixed by `lmutil lmreread`, once by
   **plugging the USB dongle back in** (`lmutil lmhostid -flexid` returned empty).
+- ✅ 2026-11-05: plugging the dongle in is **not enough on its own**. `lmstat` still said
+  `maklmgrd: The desired vendor daemon is down. (-97,121)` until `lmutil lmreread -c
+  27000@127.0.0.1`. Meanwhile a native agent's `JOIN` just **hangs** (the CLI reports *"no reply
+  to 'JOIN …' within 30.0s"*) - no licence error at all. A JOIN timeout means check `lmstat` first.
+- ✅ 2026-11-05: **the BTK bridge configs in `C:\MAKrexchange2.9in64` hard-code the repo path.**
+  After the repo was renamed from `HLAUnitTestingKit`, both brokers logged *"could not connect to
+  the RTI - exception thrown"* even though vrx opened TCP 5111 and both RTI Assistants started.
+  The cause was the `RTI_CONFIG` / `RTI_RID_FILE` lines pointing at the old folder. `BTK-Bridge.xml`
+  is fixed (original kept as `BTK-Bridge.xml.bak-HLAUnitTestingKit`). The other `BTK-Bridge-*.xml`
+  and `MX-*.xml` variants **still point at the old path**. If a broker cannot connect, grep its
+  config for the repo path before suspecting the RTI.
+- ✅ HLA 1.3 attribute/parameter handles are unique only **within a class** - see
+  `src/BrokerTestKit.AgentNative/README.md` ("HLA 1.3 specifics"). Any federate that declares more
+  than one class must key handle→name maps by class.
 
 ---
 

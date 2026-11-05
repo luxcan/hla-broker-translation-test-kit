@@ -154,10 +154,11 @@ no datatype column. Concretely:
 2. copy `config/bridge-stock-rpr.profile` to a new `.profile` and point each side at them: the
    `fedFile` / `fom`, the Evolved side's `joinFom` modules (they must match what the broker joins
    with, or federation B receives nothing, silently — see mak-rti-knowledge.md §9), and `class`
-3. generate the CSV templates from the FOMs (GUI: CSV template tab; CLI: `template`), naming any
+3. generate the CSV templates from the FOMs (GUI: Tools › CSV template; CLI: `template`), naming any
    `--variant` / `--array` choices, and fill them in from the mapping table
-4. run `BrokerTestKit.Cli.exe entity input.csv expected.csv --profile <your.profile>`, or import
-   the profile on the GUI's Connections tab and use the Run tab
+4. run `BrokerTestKit.Cli.exe entity input.csv expected.csv --profile <your.profile>` (or
+   `case <file.testcase> --profile …` for several classes), or in the GUI create a pair with the
+   profile's values, add a test case from the filled-in sheets and run it
 
 Do **not** use the CLI's `native` mode for this: it predates profiles and hard-codes federation
 names, FOM files and the class, so it cannot pick an RTI, rid or join modules.

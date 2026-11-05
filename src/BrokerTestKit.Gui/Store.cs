@@ -55,6 +55,53 @@ namespace BrokerTestKit.Gui
         public string Duration { get { return Seconds.ToString("F1", CultureInfo.InvariantCulture) + " s"; } }
         public string Tally { get { return Passed + " passed · " + Failed + " failed · " + TimedOut + " timed out"; } }
         public string Mode { get { return SelfTest ? "self-test" : "A → broker → B"; } }
+
+        // ---- pairs / test cases (PRP gui-redesign) ----
+        public long? PairId, TestCaseId;
+        public string PairName, TestCaseName;
+        public double? LatencyP50;
+
+        /// <summary>
+        /// One word for the result column: Pass, Fail or Timeout. Timeout only when nothing passed
+        /// or failed - a run where the broker went silent; any wrong value or an abort is a Fail.
+        /// Kept in step with Store.OutcomeSql so filters and labels agree.
+        /// </summary>
+        public string Result
+        {
+            get
+            {
+                if (!Finished || !string.IsNullOrEmpty(AbortReason)) return "Fail";
+                if (Failed > 0) return "Fail";
+                if (TimedOut > 0) return "Timeout";
+                return Passed > 0 ? "Pass" : "Fail";
+            }
+        }
+        public string ResultText
+        {
+            get
+            {
+                var r = Result == "Timeout" ? "Timed out" : Result;
+                var total = Passed + Failed + TimedOut;
+                if (!Finished) return "Incomplete · " + Passed + " / " + total;
+                if (!string.IsNullOrEmpty(AbortReason)) return "Aborted · " + Passed + " / " + total;
+                return r + " · " + Passed + " / " + total;
+            }
+        }
+        public string When { get { return Fmt.When(StartedUtc); } }
+        public string LatencyText { get { return LatencyP50.HasValue ? LatencyP50.Value.ToString("F0", CultureInfo.InvariantCulture) + " ms" : "—"; } }
+        public string PairDisplay { get { return string.IsNullOrEmpty(PairName) ? Pair : PairName; } }
+        public string TestCaseDisplay { get { return string.IsNullOrEmpty(TestCaseName) ? "—" : TestCaseName; } }
+    }
+
+    /// <summary>The PRP's one timestamp format: dd MMM yy HH:mm, local, invariant month names.</summary>
+    public static class Fmt
+    {
+        public static string When(DateTime utc)
+        {
+            return utc.ToLocalTime().ToString("dd MMM yy HH:mm", CultureInfo.InvariantCulture);
+        }
+
+        public static string When(RunSummary r) { return r == null ? "—" : When(r.StartedUtc); }
     }
 
     /// <summary>
@@ -65,7 +112,7 @@ namespace BrokerTestKit.Gui
     /// flat files — "when did this attribute start failing?" is a relational question over
     /// runs × rows × field comparisons, and it grows without bound.
     /// </summary>
-    public sealed class Store : IDisposable
+    public sealed partial class Store : IDisposable
     {
         private readonly SqliteConnection _cn;
         public readonly Workspace Workspace;
@@ -189,6 +236,7 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
             AddColumn("run", "conn_b", "TEXT");
             AddColumn("run", "input_path", "TEXT");
             AddColumn("run", "expected_path", "TEXT");
+            MigratePairs();
         }
 
         /// <summary>Add a column unless it is already there. SQLite has no ADD COLUMN IF NOT EXISTS.</summary>
@@ -592,6 +640,7 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
                     cmd.ExecuteNonQuery();
                 }
             }
+            InsertParts(stepId, step);
         }
 
         public void EndRun(long runId, RunReport report)
@@ -724,6 +773,7 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
                             });
                 }
             }
+            LoadParts(runId, steps);
             return steps;
         }
 

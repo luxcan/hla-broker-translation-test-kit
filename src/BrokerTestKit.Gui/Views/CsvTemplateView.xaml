@@ -1,0 +1,112 @@
+<UserControl x:Class="BrokerTestKit.Gui.Views.CsvTemplateView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="32,26,32,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="0,0,0,14">
+            <TextBlock Text="CSV template" Style="{StaticResource PageTitle}"/>
+            <TextBlock Style="{StaticResource PageLead}" MaxWidth="1000" HorizontalAlignment="Left"
+                       Text="Pick an object class or an interaction, tick what the test touches, then download the template. Columns and datatypes come from the FOM — the CSV never states a type, so it cannot drift out of step with the FOM. Upload the result into a test case as a Send or Receive sheet."/>
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Label Content="From" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <ComboBox x:Name="TemplateFom" DisplayMemberPath="Name" Width="280" Height="30"
+                          SelectionChanged="TemplateFomChanged"/>
+                <TextBlock x:Name="FomSummary" VerticalAlignment="Center" Margin="14,0,0,0" Style="{StaticResource Muted}"/>
+            </StackPanel>
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="240"/>
+                <ColumnDefinition Width="14"/>
+                <ColumnDefinition Width="*" MinWidth="460"/>
+                <ColumnDefinition Width="14"/>
+                <ColumnDefinition Width="280"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource Card}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Classes and interactions" Style="{StaticResource CardTitle}" Margin="0,0,0,8"/>
+                    <TextBox DockPanel.Dock="Top" x:Name="FilterBox" TextChanged="FilterChanged" Margin="0,0,0,8"
+                             ToolTip="Filter by name"/>
+                    <ListBox x:Name="ClassList" DisplayMemberPath="Display" SelectionChanged="ClassSelected"/>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource Card}">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Content="All" Click="PickAll" MinWidth="56"/>
+                            <Button Content="None" Click="PickNone" MinWidth="56" Margin="0"/>
+                        </StackPanel>
+                        <TextBlock Text="Attributes / parameters" Style="{StaticResource CardTitle}" VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <DataGrid x:Name="MemberGrid" CanUserAddRows="False" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Binding="{Binding Selected, UpdateSourceTrigger=PropertyChanged}" Width="34"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" Width="*" MinWidth="150"/>
+                            <DataGridTextColumn Header="FOM datatype" Binding="{Binding DataType}" IsReadOnly="True" Width="*" MinWidth="120"/>
+                            <DataGridTemplateColumn Header="Variant / elements" Width="130">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <ComboBox ItemsSource="{Binding Alternatives}" SelectedItem="{Binding Choice, Mode=TwoWay}"
+                                                      ToolTip="This attribute is a variant record - choose which alternative the sheet means.">
+                                                <ComboBox.Style>
+                                                    <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsVariant}" Value="False">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ComboBox.Style>
+                                            </ComboBox>
+                                            <TextBox Text="{Binding Elements, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                     ToolTip="How many elements this array carries. The FOM cannot say - a lengthless array's length is its content.">
+                                                <TextBox.Style>
+                                                    <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsArray}" Value="False">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBox.Style>
+                                            </TextBox>
+                                        </Grid>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Resolved" Binding="{Binding Resolved}" IsReadOnly="True" Width="*" MinWidth="150"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Column="4" Style="{StaticResource Card}">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Text="Generate" Style="{StaticResource CardTitle}"/>
+                        <Label Content="Rows to pre-create"/>
+                        <TextBox x:Name="RowCount" Text="5"/>
+                        <Label Content="Default tolerance for float columns"/>
+                        <TextBox x:Name="TolBox" Text="0.001"/>
+                        <Button Content="Download template…" Click="DownloadTemplate" Margin="0,14,0,8"
+                                Style="{StaticResource AccentButton}" HorizontalAlignment="Stretch"/>
+                        <Button Content="Preview template text" Click="PreviewTemplate" HorizontalAlignment="Stretch" Margin="0"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,12,0,8"
+                                   Text="A variant record (RPR 2.0 Spatial) has no layout until you pick an alternative. Pick one and it expands into ordinary numeric columns; leave it and it stays a single hex value."/>
+                    </StackPanel>
+                    <TextBox x:Name="PreviewBox" Style="{StaticResource Mono}" Visibility="Collapsed"
+                             BorderThickness="1" BorderBrush="{DynamicResource Divider}"/>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

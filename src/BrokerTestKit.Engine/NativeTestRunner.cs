@@ -269,9 +269,39 @@ namespace BrokerTestKit.Engine
         private void Publish(InputStep step, out DateTime sentUtc)
         {
             sentUtc = DateTime.MaxValue;
+            var buffers = AssembleAttributes(step.Attributes);
+
+            var id = string.IsNullOrEmpty(step.EntityId) ? "e" + step.Step : step.EntityId;
+
+            if (_cfgA.IsInteraction)
+            {
+                // No instance to register: parameters stage, then one SENDINT puts them on the wire.
+                foreach (var kv in buffers) _a.SetParam(_cfgA.Alias, kv.Key, kv.Value);
+                sentUtc = DateTime.UtcNow;
+                _a.SendInteraction(_cfgA.Alias);
+                Report(step.Step, "sent interaction with " + buffers.Count + " parameter(s) [" + id + "]");
+                return;
+            }
+
+            if (_registered.Add(id))
+                _a.Register(id, _cfgA.Alias, SafeInstanceName(id));
+
+            foreach (var kv in buffers) _a.SetAttr(id, kv.Key, kv.Value);
+            sentUtc = DateTime.UtcNow;
+            _a.Update(id);
+
+            Report(step.Step, "published " + buffers.Count + " attribute(s) on " + id);
+        }
+
+        /// <summary>
+        /// CSV cells -&gt; whole attribute (or parameter) values, merged by byte offset. Shared with
+        /// <see cref="TestCaseRunner"/> so both runners put identical bytes on the wire.
+        /// </summary>
+        internal static Dictionary<string, byte[]> AssembleAttributes(IEnumerable<AttributeCell> cells)
+        {
             var buffers = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var cell in step.Attributes)
+            foreach (var cell in cells)
             {
                 string attr, sub;
                 ValueCodec.SplitPath(cell.Name, out attr, out sub);
@@ -310,31 +340,11 @@ namespace BrokerTestKit.Engine
                 Array.Copy(bytes, 0, buf, spec.Offset, bytes.Length);
                 buffers[attr] = buf;
             }
-
-            var id = string.IsNullOrEmpty(step.EntityId) ? "e" + step.Step : step.EntityId;
-
-            if (_cfgA.IsInteraction)
-            {
-                // No instance to register: parameters stage, then one SENDINT puts them on the wire.
-                foreach (var kv in buffers) _a.SetParam(_cfgA.Alias, kv.Key, kv.Value);
-                sentUtc = DateTime.UtcNow;
-                _a.SendInteraction(_cfgA.Alias);
-                Report(step.Step, "sent interaction with " + buffers.Count + " parameter(s) [" + id + "]");
-                return;
-            }
-
-            if (_registered.Add(id))
-                _a.Register(id, _cfgA.Alias, SafeInstanceName(id));
-
-            foreach (var kv in buffers) _a.SetAttr(id, kv.Key, kv.Value);
-            sentUtc = DateTime.UtcNow;
-            _a.Update(id);
-
-            Report(step.Step, "published " + buffers.Count + " attribute(s) on " + id);
+            return buffers;
         }
 
         /// <summary>Instance names may not contain spaces (the line protocol is space delimited).</summary>
-        private static string SafeInstanceName(string id)
+        internal static string SafeInstanceName(string id)
         {
             var sb = new StringBuilder("BTK-");
             foreach (var c in id) sb.Append(char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '-');
@@ -401,8 +411,14 @@ namespace BrokerTestKit.Engine
 
         private static List<FieldResult> Compare(ExpectedStep exp, Candidate candidate)
         {
+            return CompareCells(exp.Expected, candidate.Get);
+        }
+
+        /// <summary>Compare expected cells against one observed object/interaction. Shared with <see cref="TestCaseRunner"/>.</summary>
+        internal static List<FieldResult> CompareCells(IEnumerable<AttributeCell> cells, Func<string, byte[]> get)
+        {
             var results = new List<FieldResult>();
-            foreach (var e in exp.Expected)
+            foreach (var e in cells)
             {
                 var fr = new FieldResult { Name = e.Name, Expected = e.Value };
 
@@ -419,7 +435,7 @@ namespace BrokerTestKit.Engine
                     continue;
                 }
 
-                var actual = candidate.Get(attr);
+                var actual = get(attr);
                 string actualText, note;
                 fr.Ok = ValueCodec.Compare(actual, e.Value, datatype, e.Tolerance, out actualText, out note);
                 fr.Actual = actualText ?? "(not received)";
@@ -457,7 +473,7 @@ namespace BrokerTestKit.Engine
         }
 
         /// <summary>Strip sub-field paths: the RTI only knows whole attributes.</summary>
-        private static List<string> BaseAttributes(List<string> paths)
+        internal static List<string> BaseAttributes(List<string> paths)
         {
             var outp = new List<string>();
             foreach (var p in paths)

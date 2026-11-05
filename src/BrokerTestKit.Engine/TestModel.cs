@@ -104,6 +104,13 @@ namespace BrokerTestKit.Engine
         public string Message;
         public readonly List<FieldResult> Fields = new List<FieldResult>();
 
+        /// <summary>
+        /// Multi-sheet test cases only (REQ-13): one entry per expected Receive row in this step,
+        /// so a report can say "Aircraft matched, IFF never arrived" instead of one verdict for
+        /// both. Empty for single-sheet runs.
+        /// </summary>
+        public readonly List<PartResult> Parts = new List<PartResult>();
+
         public override string ToString()
         {
             return string.Format(CultureInfo.InvariantCulture,
@@ -115,9 +122,54 @@ namespace BrokerTestKit.Engine
         }
     }
 
+    /// <summary>
+    /// One expected Receive row inside a multi-sheet step (REQ-13): which class, which row, and
+    /// whether it was matched on federation B.
+    /// </summary>
+    public sealed class PartResult
+    {
+        // Properties, not fields: the GUI binds to them (WPF binding cannot see fields).
+        public string ClassName { get; set; }
+        public string EntityId { get; set; }
+        /// <summary>Pass = matched; Fail = objects of the class arrived, none matched; Timeout = none arrived.</summary>
+        public Outcome Outcome { get; set; }
+        public string Message { get; set; }
+        /// <summary>The outcome as text, for UI triggers that compare strings.</summary>
+        public string OutcomeName { get { return Outcome.ToString(); } }
+
+        public override string ToString()
+        {
+            return string.Format(CultureInfo.InvariantCulture, "{0,-7} {1} {2}  {3}",
+                Outcome, ClassName, EntityId, Message);
+        }
+    }
+
+    /// <summary>Per-class roll-up of a multi-sheet run (REQ-13 reporting: test case → class → row).</summary>
+    public sealed class ClassTally
+    {
+        public string ClassName;
+        public int Expected;
+        public int Matched;
+        public int Wrong;
+        public int Missing;
+
+        public override string ToString()
+        {
+            return string.Format(CultureInfo.InvariantCulture,
+                "{0}: {1} expected, {2} matched, {3} wrong, {4} never arrived",
+                ClassName, Expected, Matched, Wrong, Missing);
+        }
+    }
+
     public sealed class RunReport
     {
         public readonly List<StepResult> Steps = new List<StepResult>();
+
+        /// <summary>Name of the multi-sheet test case this run executed, if any (REQ-13).</summary>
+        public string TestCase;
+
+        /// <summary>Per Receive class, in manifest order. Empty for single-sheet runs.</summary>
+        public readonly List<ClassTally> Classes = new List<ClassTally>();
         public DateTime StartedUtc = DateTime.UtcNow;
         public TimeSpan Duration;
 
@@ -146,7 +198,9 @@ namespace BrokerTestKit.Engine
                 "{0} step(s): {1} passed, {2} failed, {3} timed out  in {4:F1}s",
                 Steps.Count, Passed, Failed, TimedOut, Duration.TotalSeconds);
 
+            if (!string.IsNullOrEmpty(TestCase)) head = "test case '" + TestCase + "': " + head;
             if (Aborted) head += Environment.NewLine + "ABORTED: " + AbortReason;
+            foreach (var c in Classes) head += Environment.NewLine + "  class " + c;
 
             var lat = LatencySummary();
             return lat == null ? head : head + Environment.NewLine + lat;

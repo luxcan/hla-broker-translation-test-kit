@@ -51,7 +51,8 @@ attributes to *existing* RPR classes, so it is delivered as a **single merged FD
 side therefore needs only `fed=<merged FDD>`; `fomModules` stays supported but is not the primary
 path. The app should still accept both shapes and say plainly which one it is dealing with.
 
-**UI ✅** — implemented on the GUI's *Federations* tab (REQ-10). Selecting HLA 1.3 shows the `.fed`
+**UI ✅** — implemented in the GUI's *FOM registry · Add a FOM* form (REQ-10); a pair then picks a
+registered FOM per side. Selecting HLA 1.3 shows the `.fed`
 and the `.omt` labelled "REQUIRED for datatypes"; selecting Evolved swaps to the FDD and reveals the
 FOM-modules and MIM fields. 1516-only fields are never offered to a 1.3 federation. Loading a FOM
 without the `.omt` on a 1.3 side fails with *"the .fed contains no datatypes at all"* rather than
@@ -144,8 +145,9 @@ Non-zero process exit on any failure so it can gate CI.
 
 **Kept and exportable ✅ (2026-11-02).** Every GUI run is saved as it happens - one record per run,
 one per row, one per field compared - in the workspace's SQLite store, so a stopped, aborted or
-crashed run still keeps every row that completed. *History…* on the Run tab reopens any past run
-exactly as it looked (rows, field-level diffs, latency); *Export results…* writes it as CSV. The
+crashed run still keeps every row that completed. Any past run reopens exactly as it looked (rows,
+field-level diffs, latency) from the Dashboard, All results or *Runs of this test case* on its
+result screen; *Export results…* writes it. The
 CLI's `--report` and the GUI export share one writer (`Engine/RunReportCsv.cs`), so the two files
 read the same: `#` header lines with the pair, both sheets and the summary, then
 `row,entityId,outcome,seconds,latencyMs,message,failedFields`. Written with a UTF-8 BOM so Excel
@@ -265,40 +267,81 @@ Renaming a FOM attribute requires **no rebuild**: new FOM file, regenerate the t
 
 ---
 
-## REQ-10 — WPF GUI ✅ built · 🔨 polish
+## REQ-10 — WPF GUI ✅ (redesigned 2026-11-05)
 
-`src/BrokerTestKit.Gui` — a four-tab shell over the Engine. It holds **no RTI connection of its
-own**: the agents are separate processes, so the GUI stays VC-agnostic and a native fault kills an
-agent rather than the app.
+`src/BrokerTestKit.Gui` is a task-shaped shell built around two saved objects, the **pair** and
+the **test case** (PRP: [`PRPs/gui-redesign-pairs.md`](../PRPs/gui-redesign-pairs.md)). It holds
+**no RTI connection of its own**: the agents are child processes, so the GUI stays VC-agnostic and
+a native fault kills an agent, not the app.
 
-### 1 · Federations
-Per-federation config for A and B. **REQ-01 is enforced in the UI**: choosing HLA 1.3 shows the
-`.fed` *and* the `.omt` (with "REQUIRED for datatypes" on the label); choosing Evolved swaps to the
-FDD and reveals the FOM-modules and MIM fields. 1516-only fields are never shown to a 1.3
-federation. Pre-fills from `RTI_CONFIG` so the app is usable the moment it opens.
+```
+Dashboard ──► Pairs ──► Pair details ──► Add / edit test case ──(save/cancel)──► Pair details
+                              └──► Test case result ◄── (Run, Run again, any run anywhere)
+Sidebar: Dashboard · Pairs   …   Tools: CSV template · FOM registry   …   [Test run box]
+```
 
-### 2 · FOM → CSV template  *(the core authoring loop)*
-Load FOM → filterable list of every **object class and interaction** → tick attributes/parameters
-(each row shows the FOM datatype and what it resolved to, e.g. `float64@8  8B`) → **Generate both
-sheets**. Structs expand to addressable leaf fields; a *Preview* window shows the raw template text
-before committing. Row count and default float tolerance are settable.
+- **Dashboard**: library counts, last run, and the last 10 runs. On first launch it shows the
+  empty states and the three first steps.
+- **Pairs / Pair details**: a pair is one broker crossing, A → B. Each direction is its own
+  pair. Pair details shows Send · A → VR-Exchange → Receive · B, then the test cases (Edit, Run,
+  Delete), then recent runs. "Run all test cases" queues every test case of the pair.
+- **New / edit pair**: covers both sides (FOM from the registry, federation, federate, RTI bin,
+  rid, `RTI_CONFIG` folder, Assistant port) with a live check per side. It also has:
+  - the join-modules box with its warning on an Evolved side;
+  - the cross-version / port check (REQ-02);
+  - an **Advanced** section with self-test and the shared licence server.
 
-### 3 · Test data
-Both sheets in editable grids, with the `#` directive block preserved across a load/save round
-trip. **Editing in-app is the point**: Excel silently strips the leading zeros from hex IDs
-(`000100010065` → `100010065`), and a golden file that is quietly wrong is worse than none.
+  Each side is saved as a connection row the pair owns (`pair-<id>-A/B`), so the run path is
+  unchanged. Deleting a pair is a hard delete of the pair, its test cases and all their runs,
+  behind a confirm that states the counts (D5).
+- **Add / edit test case** (REQ-13): Send and Receive columns, with a class chip and a sheet card
+  per class and **several classes per side**.
+  - **+ Class** picks a class or interaction from that side's FOM and the columns to include,
+    or uploads a CSV instead.
+  - Each card has *Upload CSV…* (checks `# class:`), *Download template*, an editable grid and
+    *+ Add row*.
+  - Receive sheets get a **± tolerance** row (D2), read from and written back to the sheet's own
+    `# tolerance:` directive.
+  - Save validates exactly as a run reads the case (`TestCase.Load`: FOM resolution, unique ids,
+    references, every Receive row tied to a Send row). Sheets are stored as content-addressed
+    assets, so a test case is self-contained.
+- **Test case result**: the live run filling in row by row, or any saved run. It shows:
+  - a verdict strip with Passed / Failed / Timed out and latency p50 / p95;
+  - a per-class line (REQ-13), and a per-class *parts* list for each row;
+  - the field comparison and the agent transcript (live only);
+  - Runs of this test case, and *Export results…* (CSV / HTML / JUnit, REQ-05).
+- **All results**: filter by pair, result and test-case text, with a tally for the filter and
+  25 runs per page.
+- **Test run box**: Running (pair, test case, progress, pass/fail, what is queued) or Idle.
+- **Rig banner**: shown only when something is wrong (D4). It covers `maklmgrd` down (checked
+  with `lmutil lmstat`, which also blocks Run), VR-Exchange not on TCP 5111 (when a non-self-test
+  pair exists), and a milder "can't check" when lmutil is missing. Checks run at start, before
+  every run, and every 60 s.
+- **Tools**: the CSV template tool (preview now inline) and the FOM registry, which gains a
+  *Used by* column and a remove guard.
 
-### 4 · Run
-Live per-row grid, colour-coded Pass / Fail / Timeout, field-level diff pane for the selected row
-(expected · actual · note), and the full agent transcript. Runs on a background thread with row-by-
-row updates marshalled through the Dispatcher, a Stop button, and a self-test checkbox that puts
-both agents on Federation A for an identity mapping. Licence exhaustion (`-4,132`) is recognised
-and explained in words, with the raw text kept underneath (REQ-07 partly satisfied).
+**Storage**: new tables `pair`, `test_case`, `test_case_sheet`, and `run_part` (per-class parts
+of a step); `run` gains `pair_id` and `test_case_id`. A one-time migration (`migrated.pairs`)
+groups every earlier run into a pair and a test case, importing the sheets where their paths
+still exist and marking the case *"sheets missing — re-upload"* where they don't. GUI runs go
+through `TestCaseRunner` (single-class cases included), so a GUI test case and a CLI `.testcase`
+behave identically.
 
-*Export results…* and *History…* (REQ-05) keep and reopen every run.
+**Verified 2026-11-05** by driving the app with UI Automation on a copy of a real workspace:
+- the migration grouped the old run into a pair and a test case;
+- created a self-test pair, then built a 3-class test case by uploading the emitter-loopback
+  sheets;
+- **Pass 2/2** (Aircraft 2/2 · EmitterSystem 2/2 · WeaponFire 1/1, references resolved);
+- after uploading the broken EmitterSystem sheet, **Fail 1/2** with both diffs;
+- both runs show under Runs of this test case and on All results;
+- the saved `# tolerance:` line is correct;
+- the empty state and the delete confirm match the boards.
 
-**Remaining polish:** a FOM-diff view between the A and B models, and generating a matched sender +
-receiver template pair from the selected connections in one step.
+**Not verified**: Stop in the middle of a long run (the self-test case finishes in 1.3 s), and
+the licence-down banner blocking Run (it needs the vendor daemon stopped).
+
+**Remaining polish:** a FOM-diff view between the A and B models, and generating a matched
+sender + receiver template pair from a pair in one step.
 
 ---
 
@@ -352,7 +395,7 @@ reporting `interaction arrived on B but 2 of 4 field(s) differ` with per-paramet
 
 ---
 
-## REQ-13 — Multi-sheet test cases ⏳
+## REQ-13 — Multi-sheet test cases ✅
 
 A **test case** is one behaviour of the broker to check, and it may span **several classes on
 each side**: N Send sheets on A, M Receive sheets on B. The motivating case is a one-to-many
@@ -365,22 +408,81 @@ translation, where one class on A becomes two on B:
 One-to-many mappings like this are where a broker most easily goes wrong, and today they cannot
 be tested at all.
 
-**Today:** a run takes exactly one input sheet and one expected sheet, one class each
-(`EntityCsvParser.ReadInput` / `ReadExpected`, [Program.cs](../src/BrokerTestKit.Cli/Program.cs) ~l.1053),
-and rows correlate by `entityId` within that one class.
+**Built ✅ (2026-11-05) — engine + CLI.** `BrokerTestKit.Cli.exe case <file.testcase>
+[--profile <file> | --selftest] [--timeout s] [--report …]…` (`Engine/TestCase.cs`,
+`Engine/TestCaseRunner.cs`). The single-sheet `entity` mode is unchanged.
 
-**Needs:**
-1. **A test-case unit** that names its Send sheets and Receive sheets (a small manifest, or
-   several `# class:` blocks in one file); each sheet still resolves against its own side's FOM
-   exactly as in REQ-03/REQ-09.
-2. **Cross-class correlation** — a Receive row can be tied to a Send row through a reference
-   attribute (e.g. `IFF.HostObjectIdentifier` → the aircraft's `EntityIdentifier`), not only by
-   its own `entityId`.
-3. **A verdict that waits for every expected class**: a Send row passes only when all of its
-   Receive rows, across all classes, have matched within the timeout (REQ-04). A missing `IFF`
-   is a failure of the `Aircraft` row, not a silent pass.
-4. **Reporting** (REQ-05) per test case, then per class, then per row and field.
+1. **The test-case unit is a manifest** — a small text file, sheet paths relative to it. Every
+   sheet is an ordinary REQ-03 entity CSV and resolves against its own side's FOM. Object and
+   interaction sheets mix freely.
+   ```
+   name:    aircraft-iff
+   send:    aircraft-in.csv
+   receive: aircraft-out.csv
+   receive: iff-out.csv
+   ```
+2. **Rows group into steps.** One step = publish every Send row in the group, then wait for every
+   Receive row in it.
+   - A Send row joins the group of its own `entityId`, unless it holds a reference, in which case
+     it joins the group of the row it references (an emitter joins its host's step).
+   - A Receive row joins the step of the Send row with the **same entityId**. Only when there is
+     none (an IFF object the broker creates out of an aircraft's `IFFCode1`) does it follow its
+     reference instead. So a wrong reference fails in the right step rather than moving the row.
+   - A group with no Receive rows is a negative test. A Receive row tied to no Send row is a load
+     error. In a test case an `entityId` may appear once per sheet.
+3. **Reference cells — the cross-class correlation.** `@<entityId>` (or `@<Class>/<entityId>` if
+   ambiguous) in an `RTIobjectId` column (`HostObjectIdentifier`, `FiringObjectIdentifier`,
+   `EmitterSystemIdentifier` …) means *the RTI instance name of that row's object on this side*.
+   On A it is the name the harness registered; on B it is the name of whichever object **matched
+   that row on B**, because VR-Exchange re-registers everything under its own names. The check is
+   "B's IFF points at B's aircraft", never a string compare against what A sent. References
+   resolve within the step, or to a row matched in an earlier step. `@@` escapes a literal `@`.
+   ✅ Encoded as NUL-terminated ASCII (RPR 2.0 declares `RTIobjectId` an `RPRnullTerminatedArray`
+   of `HLAASCIIchar`) and compared with trailing NULs ignored. **Confirmed across the broker for
+   RPR 1.0's `RTIObjectIdStruct` too**: VR-Exchange read our RPR 1.0 `FiringObjectIdentifier` as
+   the shooter's name and re-issued it on RPR 2.0 (see *Verified* below).
+4. **The verdict waits for every expected class.** Each observed object or interaction can satisfy
+   only one Receive row. Step outcomes:
+   - **Pass**: every Receive row matched.
+   - **Timeout**: nothing of any expected class arrived.
+   - **Fail**: anything in between. *A missing IFF fails the aircraft's step* even though the
+     aircraft arrived intact.
+5. **Reporting** = test case → class → row → field. Each step carries one *part* per Receive row
+   (`Pass Aircraft 1:1:101 matched object 12 'X'`, `Timeout IFF iff-1 no IFF arrived`). The run
+   carries a per-class tally (expected / matched / wrong / never arrived). Both appear in the
+   console, the CSV header, the HTML page (a class table plus parts per row) and the JUnit
+   `<properties>` / `<system-out>`.
 
-**UI** — drawn in the *screen redesign* canvas: Pairs → Pair details → *Add / edit test case*
-(class chips per side, one sheet per class) → *Test case result*. Interaction sheets (REQ-12)
-should be allowed in the same test case as object sheets.
+**Verified** on a loopback self-test over RTI 5.0.1 with `tests/cases/emitter-loopback/`
+(gitignored test data, like all FOM-derived CSVs). It has three Send sheets (`Aircraft`,
+`EmitterSystem` → `@aircraft`, `WeaponFire` interaction → `@aircraft`) and the matching Receive
+sheets.
+- `emitter-loopback.testcase`: all pass, exit 0, references resolved on B.
+- `emitter-loopback-broken.testcase`: exit 1. It has:
+  - an emitter pointing at the wrong aircraft, with a wrong `EmitterType` (Fail, both diffs listed);
+  - an `EmitterBeam` nobody publishes (Timeout part; the step Fails while its aircraft and emitter
+    match).
+
+**Verified across the broker ✅ (2026-11-05)** with `tests/cases/shooter-bridge/` over
+`config/bridge-stock-rpr.profile` (stock RPR 1.0 / RTI 4.5.1 → VR-Exchange 2.9 → stock RPR 2.0 /
+RTI 5.0.1): a `GroundVehicle` plus the `WeaponFire` it shoots, `FiringObjectIdentifier=@1:1:1`, two
+steps.
+- `shooter-bridge.testcase`: exit 0. Both classes match in every step, and B's WeaponFire names
+  B's copy of the shooter. Latency is about 365 ms per step.
+- `shooter-bridge-wrongref.testcase` (fire-1 expected to name the other shooter): exit 1. Only
+  that WeaponFire row fails; its shooter still passes.
+
+⚠️ On this rig VR-Exchange **kept A's instance names** on B (`BTK-1-1-1` on both sides), so this
+run cannot show the "B's own name" resolution doing anything a string compare would not. The
+resolution is still the right check, because the name is not guaranteed to survive.
+
+**Still not verified:** the motivating Aircraft → Aircraft + IFF one-to-many case. Stock RPR 1.0
+has no IFF object class, so it waits for the customised FOMs and broker mapping (FOM-HANDOVER).
+
+Building this found and fixed an HLA 1.3 agent bug: attribute handles are per-class, and
+declaring a second class used to rename the first class's attributes (agent README, "HLA 1.3
+specifics").
+
+**UI ✅ (2026-11-05)** — the Add / edit test case and Test case result screens of the redesign
+(REQ-10): several classes per side, one sheet card per class, a per-class parts list per row, and
+per-class tallies. Interaction sheets mix with object sheets.

@@ -103,6 +103,13 @@ namespace BrokerTestKit.Gui
 
         public static void Save(Sheet sheet, string path)
         {
+            File.WriteAllText(path, ToText(sheet));
+            sheet.Path = path;
+        }
+
+        /// <summary>The sheet as CSV text, directives first. What a test case stores as its asset.</summary>
+        public static string ToText(Sheet sheet)
+        {
             var sb = new StringBuilder();
             foreach (var d in sheet.Directives) sb.Append(d).Append('\n');
             if (sheet.Directives.Count > 0) sb.Append('\n');
@@ -128,9 +135,7 @@ namespace BrokerTestKit.Gui
                 }
                 sb.Append('\n');
             }
-
-            File.WriteAllText(path, sb.ToString());
-            sheet.Path = path;
+            return sb.ToString();
         }
 
         /// <summary>Build an editable sheet directly from generated template text.</summary>

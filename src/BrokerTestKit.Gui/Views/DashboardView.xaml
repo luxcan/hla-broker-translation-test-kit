@@ -1,0 +1,116 @@
+<UserControl x:Class="BrokerTestKit.Gui.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="32,26,32,32">
+            <DockPanel Margin="0,0,0,20">
+                <Button x:Name="NewPairButton" DockPanel.Dock="Right" Content="+ New pair" Style="{StaticResource AccentButton}"
+                        Click="NewPair" VerticalAlignment="Top"/>
+                <StackPanel>
+                    <TextBlock Text="Dashboard" Style="{StaticResource PageTitle}"/>
+                    <TextBlock Style="{StaticResource PageLead}"
+                               Text="What was tested last, and how it went. Start from a pair to run its test cases."/>
+                </StackPanel>
+            </DockPanel>
+
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="2*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="Library" Style="{StaticResource CardTitle}"/>
+                        <StackPanel x:Name="LibraryCounts" Orientation="Horizontal" Margin="0,10,0,10">
+                            <StackPanel Margin="0,0,32,0">
+                                <TextBlock x:Name="FomCount" Text="0" Style="{StaticResource BigNumber}"/>
+                                <TextBlock Text="FOMs" Style="{StaticResource Muted}"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock x:Name="PairCount" Text="0" Style="{StaticResource BigNumber}"/>
+                                <TextBlock Text="Pairs" Style="{StaticResource Muted}"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="FOM registry" Style="{StaticResource LinkButton}" Click="OpenRegistry" Margin="0,0,16,0"/>
+                            <Button Content="All pairs" Style="{StaticResource LinkButton}" Click="OpenPairs"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="Last run" Style="{StaticResource CardTitle}"/>
+                        <StackPanel x:Name="LastRunNone" Margin="0,12,0,0">
+                            <TextBlock Text="No runs yet" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondary}"/>
+                            <TextBlock Text="Your most recent result will appear here." Style="{StaticResource Muted}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <DockPanel x:Name="LastRunSome" Margin="0,12,0,0" Visibility="Collapsed">
+                            <Button DockPanel.Dock="Right" Content="Open" Style="{StaticResource LinkButton}" Click="OpenLastRun" VerticalAlignment="Top"/>
+                            <TextBlock x:Name="LastIcon" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="26"
+                                       Margin="0,2,14,0" VerticalAlignment="Top" Style="{StaticResource ResultLabel}"/>
+                            <StackPanel>
+                                <TextBlock x:Name="LastResult" FontSize="18" Style="{StaticResource ResultLabel}"/>
+                                <TextBlock x:Name="LastWhat" Style="{StaticResource Muted}" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <DockPanel Margin="0,0,0,10">
+                        <Button DockPanel.Dock="Right" Content="All results" Style="{StaticResource LinkButton}" Click="OpenAllResults"/>
+                        <TextBlock Text="Last 10 test runs" Style="{StaticResource CardTitle}"/>
+                    </DockPanel>
+
+                    <DataGrid x:Name="RunsGrid" Style="{StaticResource ListGrid}" MouseDoubleClick="RunDoubleClick">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="When" Binding="{Binding When}" Width="130"/>
+                            <DataGridTemplateColumn Header="Pair" Width="1.4*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding PairDisplay}" Style="{StaticResource LinkButton}" Click="OpenPairOfRun" Margin="8,0"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Test case" Binding="{Binding TestCaseDisplay}" Width="1.4*"/>
+                            <DataGridTemplateColumn Header="Result" Width="150">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding ResultText}" Tag="{Binding Result}" Style="{StaticResource ResultLabel}"
+                                                   VerticalAlignment="Center" Margin="8,0"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Latency p50" Binding="{Binding LatencyText}" Width="100"/>
+                            <DataGridTemplateColumn Header="" Width="70">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="Open" Style="{StaticResource LinkButton}" Click="OpenRun" Margin="8,0"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel x:Name="EmptyRuns" Visibility="Collapsed" Margin="0,8,0,4">
+                        <TextBlock Text="No test runs yet" FontWeight="SemiBold" FontSize="15"/>
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,12"
+                                   Text="Three steps to your first result:"/>
+                        <TextBlock Text="1.  Add your FOMs — the files each federation speaks." Margin="0,0,0,4"/>
+                        <TextBlock Text="2.  Create a pair — what you Send on A and where B must Receive it." Margin="0,0,0,4"/>
+                        <TextBlock Text="3.  Add a test case and run it." Margin="0,0,0,14"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Add a FOM" Click="OpenRegistry"/>
+                            <Button Content="Create your first pair" Style="{StaticResource AccentButton}" Click="NewPair"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -228,8 +228,40 @@ namespace BrokerTestKit.Gui
         /// </summary>
         public string Latency { get { return _latency; } set { _latency = value; Raise("Latency"); } }
         public ObservableCollection<FieldRow> Fields { get; private set; }
+        /// <summary>REQ-13: one line per expected Receive row of this step.</summary>
+        public ObservableCollection<PartResult> Parts { get; private set; }
 
-        public ResultRow() { Fields = new ObservableCollection<FieldRow>(); }
+        private string _fieldsText = "";
+        /// <summary>"7 / 8" fields matched - the result grid's Fields column.</summary>
+        public string FieldsText { get { return _fieldsText; } set { _fieldsText = value; Raise("FieldsText"); } }
+
+        public ResultRow()
+        {
+            Fields = new ObservableCollection<FieldRow>();
+            Parts = new ObservableCollection<PartResult>();
+        }
+
+        public void Apply(StepResult r)
+        {
+            Outcome = r.Outcome.ToString();
+            Message = r.Message;
+            Seconds = r.Elapsed.TotalSeconds;
+            Latency = r.Latency.HasValue
+                ? r.Latency.Value.TotalMilliseconds.ToString("F1", CultureInfo.InvariantCulture) + " ms" : "—";
+            Fields.Clear();
+            int ok = 0;
+            foreach (var f in r.Fields) { Fields.Add(FieldRow.From(f)); if (f.Ok) ok++; }
+            FieldsText = r.Fields.Count == 0 ? "—" : ok + " / " + r.Fields.Count;
+            Parts.Clear();
+            foreach (var p in r.Parts) Parts.Add(p);
+        }
+
+        public static ResultRow From(StepResult r)
+        {
+            var row = new ResultRow { Step = r.Step, EntityId = r.EntityId };
+            row.Apply(r);
+            return row;
+        }
     }
 
     public sealed class FieldRow
@@ -244,7 +276,7 @@ namespace BrokerTestKit.Gui
         {
             return new FieldRow
             {
-                Ok = f.Ok ? "OK" : "FAIL",
+                Ok = f.Ok ? "✓" : "✗",
                 Name = f.Name,
                 Expected = f.Expected,
                 Actual = f.Actual,

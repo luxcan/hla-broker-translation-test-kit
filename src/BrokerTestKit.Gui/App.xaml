@@ -9,6 +9,7 @@
                      light dictionary could be dropped in later without touching a single style. -->
                 <ResourceDictionary Source="/BrokerTestKit.Gui;component/Themes/Precision.Dark.xaml" />
                 <ResourceDictionary Source="/BrokerTestKit.Gui;component/Themes/Controls.xaml" />
+                <ResourceDictionary Source="/BrokerTestKit.Gui;component/Themes/Pages.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

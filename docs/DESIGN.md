@@ -349,14 +349,11 @@ Resolved since this list was written (2026-11-02):
   wait-or-timeout and measured latency.
 
 Open:
-- **Linked objects (parked 2026-11-02 — 1:1 testing first).** RPR links an aircraft to its
-  emitters by REFERENCE, not containment: `EmbeddedSystem.HostObjectIdentifier` and
-  `EmitterBeam.EmitterSystemIdentifier` are `RTIobjectId` — an RTI object-instance NAME. The kit
-  today runs one class per run and has no reference value type. The trap for when this is
-  built: VR-Exchange re-registers every object on federation B under its OWN names, so the
-  correct check is "B's emitter points at B's copy of the aircraft", never a string compare of
-  what A sent. Needs multi-class runs (host registered first), a reference column type (e.g.
-  `@1:1:1` = "the instance of row 1:1:1"), and resolution on both sides before comparing.
+- ~~**Linked objects**~~ — **done 2026-11-05 as REQ-13** (APP-REQUIREMENTS): multi-sheet test
+  cases with `@<entityId>` reference cells. A reference on B resolves to the instance name of the
+  object that matched that row on B, so it checks "B's emitter points at B's copy of the
+  aircraft", as this note required. Open: proof across the broker (needs a FOM pair where both
+  sides model the linked class), and the GUI screens.
 - **Late join** — measured, see mak-rti-knowledge.md §10. Open there: the federation-B result
   assumes a passive consumer (neither agent calls `requestAttributeValueUpdate`).
 - **Delete / remove** (§9 scope) — the agents implement `DELETE` and the removal callback, but no

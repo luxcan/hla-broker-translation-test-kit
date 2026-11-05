@@ -115,6 +115,8 @@ namespace BrokerTestKit.Engine
                 foreach (var kv in RunReportWriter.SplitContext(context)) Property(w, kv.Key, kv.Value);
                 var lat = report.LatencySummary();
                 if (lat != null) Property(w, "latency", lat);
+                if (!string.IsNullOrEmpty(report.TestCase)) Property(w, "testcase.name", report.TestCase);
+                foreach (var c in report.Classes) Property(w, "class." + c.ClassName, c.ToString());
                 w.WriteEndElement();
 
                 foreach (var st in report.Steps)
@@ -144,6 +146,7 @@ namespace BrokerTestKit.Engine
                         var sb = new StringBuilder();
                         if (st.Latency.HasValue)
                             sb.AppendLine("latency " + st.Latency.Value.TotalMilliseconds.ToString("F1", inv) + "ms");
+                        foreach (var p in st.Parts) sb.AppendLine(p.ToString());
                         foreach (var f in st.Fields) sb.AppendLine(f.ToString());
                         w.WriteElementString("system-out", sb.ToString());
                     }
@@ -184,6 +187,7 @@ namespace BrokerTestKit.Engine
             w.WriteAttributeString("type", type);
             w.WriteAttributeString("message", st.Message ?? type);
             var sb = new StringBuilder();
+            foreach (var p in st.Parts) if (p.Outcome != Outcome.Pass) sb.AppendLine(p.ToString());
             foreach (var f in st.Fields) if (!f.Ok) sb.AppendLine(f.ToString());
             if (sb.Length > 0) w.WriteString(sb.ToString());
             w.WriteEndElement();
@@ -233,6 +237,19 @@ namespace BrokerTestKit.Engine
             var lat = report.LatencySummary();
             if (lat != null) h.Append("<p class=\"lat\">").Append(E(lat)).Append("</p>\n");
 
+            if (report.Classes.Count > 0)
+            {
+                h.Append("<div class=\"scroll\"><table class=\"fields classes\"><thead><tr><th>Receive class</th>")
+                 .Append("<th>Expected</th><th>Matched</th><th>Wrong</th><th>Never arrived</th></tr></thead><tbody>");
+                foreach (var c in report.Classes)
+                    h.Append("<tr class=\"").Append(c.Matched == c.Expected ? "ok" : "bad").Append("\"><td>")
+                     .Append(E(c.ClassName)).Append("</td><td>").Append(c.Expected.ToString(inv))
+                     .Append("</td><td>").Append(c.Matched.ToString(inv)).Append("</td><td>")
+                     .Append(c.Wrong.ToString(inv)).Append("</td><td>").Append(c.Missing.ToString(inv))
+                     .Append("</td></tr>");
+                h.Append("</tbody></table></div>\n");
+            }
+
             var ctx = RunReportWriter.SplitContext(context);
             if (ctx.Count > 0)
             {
@@ -260,6 +277,19 @@ namespace BrokerTestKit.Engine
                 if (!string.IsNullOrEmpty(st.Message))
                     h.Append("<span class=\"msg\">").Append(E(st.Message)).Append("</span>");
                 h.Append("</summary>");
+
+                if (st.Parts.Count > 0)
+                {
+                    h.Append("<ul class=\"parts\">");
+                    foreach (var p in st.Parts)
+                    {
+                        var pc = p.Outcome.ToString().ToLowerInvariant();
+                        h.Append("<li><span class=\"badge ").Append(pc).Append("\">").Append(p.Outcome)
+                         .Append("</span> <b>").Append(E(p.ClassName)).Append("</b> ").Append(E(p.EntityId))
+                         .Append(" <span class=\"num\">").Append(E(p.Message)).Append("</span></li>");
+                    }
+                    h.Append("</ul>");
+                }
 
                 if (st.Fields.Count > 0)
                 {
@@ -324,6 +354,8 @@ summary{cursor:pointer;padding:8px 12px;display:flex;flex-wrap:wrap;gap:4px 12px
 .fields tr.bad td{background:var(--fail-bg)}.fields tr.bad td:first-child{color:var(--fail);font-weight:700}
 .fields tr.ok td:first-child{color:var(--pass)}
 code{font:12px ui-monospace,Consolas,monospace;word-break:break-all}
+.parts{list-style:none;margin:0;padding:0 12px 8px;display:flex;flex-direction:column;gap:4px}
+.classes{margin:4px 0 12px}
 ";
     }
 }
