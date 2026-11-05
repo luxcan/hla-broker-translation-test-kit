@@ -54,6 +54,10 @@ namespace BrokerTestKit.Cli
             catch (Exception ex)
             {
                 Console.Error.WriteLine("FAILED: " + ex.GetType().Name + ": " + ex.Message);
+                // REQ-07: a licence failure in words, ahead of the stack trace that would bury it.
+                var licence = LicenceDiagnosis.Explain(ex.ToString());
+                if (licence != null) { Console.Error.WriteLine(); Console.Error.WriteLine("LICENCE: " + licence); }
+                Console.Error.WriteLine();
                 Console.Error.WriteLine(ex.ToString());
                 return 1;
             }

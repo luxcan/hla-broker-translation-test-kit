@@ -58,9 +58,10 @@ the wire. The native agents move exact bytes, resolved by name at runtime with n
 Built separately (not in the `.sln`):
 
 ```bat
-src\BrokerTestKit.AgentNativeuild-native.bat
+src\BrokerTestKit.AgentNative\build-native.bat
 tests
-ativeun-smoke.bat
+ative
+un-smoke.bat
 ```
 
 See [AgentNative/README.md](BrokerTestKit.AgentNative/README.md) for the line protocol.

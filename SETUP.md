@@ -3,19 +3,38 @@
 This repo deliberately **does not** contain MAK's licensed files. Everything below comes from
 your own MAK install; nothing here is redistributable by us. See `.gitignore` for the exact list.
 
+## Fresh clone — checklist
+
+In order; each step has a section below.
+
+1. Install the MAK products in the table below, and plug in the licence dongle.
+   `C:\MAK\MAKLicenseManager\lmutil.exe lmstat -c 27000@127.0.0.1` must show `maklmgrd: UP`.
+   If it doesn't, run `lmutil lmreread -c 27000@127.0.0.1`; plugging the dongle in is not enough
+   on its own.
+2. Copy the FOMs into `config/` ([Files you must supply](#files-you-must-supply)).
+3. Create the rid files in `config/` ([RID files](#rid-files)): `rid.mtl` for single-RTI work,
+   plus `rid-fedA-rti451.mtl` and `rid-fedB-rti501.mtl` for the bridge.
+4. Copy `vrLinkSharp.dll` to `lib/vrlink/`.
+5. Build: `build-native.bat`, then the solution ([Build](#build)).
+6. Prove the install: `tests\native\run-smoke.bat` ([Prove the install](#prove-the-install)).
+7. For the bridge: recreate VR-Exchange's `BTK-Bridge.xml` and its two `.bcf` files in
+   `C:\MAK\vrexchange2.9\bin64` ([The VR-Exchange side](#the-vr-exchange-side)), with paths that
+   point at **this clone**. Then `tests\native\run-bridge.ps1` must exit 0.
+
 ## What you need installed
 
 | Thing | Version proven here | Notes |
 |---|---|---|
-| MAK RTI | `makRti5.0.1` (also proven on `4.6.1`) | `C:\MAK\makRti<ver>` |
-| VR-Link | 5.9 | only for the legacy C# agent; the native agents do not need it |
-| VR-Exchange | 2.5.1 | the broker under test |
+| MAK RTI | `makRti5.0.1` (Fed B), `makRti4.5.1(vc14)` (Fed A of the bridge) | `C:\MAK\makRti<ver>`; also proven on `4.6.1` |
+| VR-Link | 5.10 | only for the legacy C# agent and `vrLinkSharp.dll`; the native agents do not need it |
+| VR-Exchange | **2.9** (x64, VC14) | the broker under test. `vrexchange2.5.1` is x86/VC10 and cannot load a VC14+ RTI |
 | Visual Studio | 2022, C++ workload | `/std:c++14` — see below |
 | .NET Framework | 4.7.2 targeting pack | REQ-11 |
 | FlexLM licence | dongle or server | `MAKLMGRD_LICENSE_FILE`, e.g. `27000@127.0.0.1` |
 
-Two RTI versions **cannot run at the same time**: they collide on the RTI Assistant's fixed
-TCP 6003. Kill `rtiAssistant.exe` before a cross-version run. See
+Two RTI **versions** run side by side only if each has its own RTI Assistant port: set
+`RTI_ASSISTANT_PORT` per side (the bridge profile uses 6003 for A and 6004 for B). If they share
+the default 6003, the second one is dropped with *"Invalid message version from Assistant"*. See
 [docs/mak-rti-knowledge.md](docs/mak-rti-knowledge.md) §3.
 
 ## Files you must supply
@@ -24,8 +43,9 @@ Copy these into `config/` from your MAK install (paths are the defaults):
 
 | File | Where to get it |
 |---|---|
-| `MAK-RPR1-1-1.fed` | `C:\MAK\vrlink5.9\data\hla\` (or your project's customised `.fed`) |
-| `RPR_FOM_v2.0_1516-2010.xml` | `C:\MAK\vrlink5.9\data\hla1516e\` |
+| `MAK-RPR1-1-1.fed` | `C:\MAK\vrlink5.10\data\hla\` (or your project's customised `.fed`) |
+| `MAK-RPR1-1-1.omt` | the same folder — the datatypes the `.fed` lacks; the bridge profile's `[A] fom` |
+| `RPR_FOM_v2.0_1516-2010.xml` | `C:\MAK\vrlink5.10\data\hla1516e\` (byte-identical to VR-Exchange's `bin64` copy) |
 | `HLAstandardMIM.xml` | `C:\MAK\makRti<ver>\data\` |
 
 And the **customised** FOMs the project under test actually uses — these are modified copies of
@@ -40,8 +60,9 @@ MAK-shipped files, so they inherit MAK's licence and stay out of the repo:
 See [docs/FOM-HANDOVER.md](docs/FOM-HANDOVER.md) for what each one has to contain and why the
 `.omt` is not optional.
 
-`lib/vrlink/vrLinkSharp.dll` — copy from `C:\MAK\vrlink5.9\lib\`. Only the legacy C# agent
-references it; the native agents talk to the RTI directly.
+`lib/vrlink/vrLinkSharp.dll` — copy from your VR-Link install (`C:\MAK\vrlink5.10\…`). The C#
+projects reference it at build time, but only the legacy C# agent uses it at run time; the native
+agents talk to the RTI directly.
 
 ### RID files
 
@@ -57,6 +78,15 @@ Bridging two RTIs needs one rid per side on **distinct** `RTI_udpPort` / `RTI_tc
 `RTI_destAddrString` — MAK's stock rids already differ per version, so start from those rather
 than one shared file. [docs/mak-rti-knowledge.md](docs/mak-rti-knowledge.md) §4 lists every
 parameter and what changed between versions.
+
+The bridge profile (`config/bridge-stock-rpr.profile`) expects two of them by name:
+
+| File | Start from | For |
+|---|---|---|
+| `rid-fedA-rti451.mtl` | `C:\MAK\makRti4.5.1(vc14)\rid.mtl` | Federation A (HLA 1.3, RPR 1.0) |
+| `rid-fedB-rti501.mtl` | `C:\MAK\makRti5.0.1\rid.mtl` | Federation B (Evolved, RPR 2.0) |
+
+The `-autoprovide` variants differ by one line (`HLAautoProvide`); see mak-rti-knowledge §10.
 
 ### Test data
 
@@ -120,6 +150,24 @@ Two entries deserve attention because they are the ones that fail quietly:
   resolve to the broker's own copies.
 - **`[B] joinFom`** must list those same 16 modules. A federate that joins with only the base FDD
   has a different FDD from the broker and receives **nothing at all** — no error, no warning.
+
+### The VR-Exchange side
+
+The broker's own configuration lives in the VR-Exchange install, not in this repo:
+
+| File in `C:\MAK\vrexchange2.9\bin64` | What it does |
+|---|---|
+| `BTK-Bridge.xml` | the two connections (one broker per federation) and **each one's environment**: `RTI_CONFIG`, `RTI_RID_FILE`, `RTI_ASSISTANT_PORT` |
+| `BTK-FedA-RPR1-rti451.bcf` | broker A: `execName BTK-FedA`, the RPR 1.0 `.fed` |
+| `BTK-FedB-RPR2-rti501.bcf` | broker B: `execName BTK-FedB`, RPR 2.0 plus the 16 join modules |
+
+They are RTI configuration, excluded like the rids. Recreate them from
+[docs/mak-rti-knowledge.md](docs/mak-rti-knowledge.md) §8–§9. Then:
+- **Point every `RTI_CONFIG` / `RTI_RID_FILE` line at this clone's `config\`.** They are absolute
+  paths. A broker whose paths are wrong logs *"could not connect to the RTI"* even though vrx
+  opens TCP 5111. That is exactly what happened after this repo was renamed.
+- **Check the licence before blaming the configs.** If vrx never opens TCP 5111 and stops at
+  `Locking Mutex`, the vendor daemon is down (checklist step 1).
 
 ## Generate test data from a FOM
 

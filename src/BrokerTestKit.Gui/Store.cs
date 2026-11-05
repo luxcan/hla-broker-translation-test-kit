@@ -82,8 +82,10 @@ namespace BrokerTestKit.Gui
             {
                 var r = Result == "Timeout" ? "Timed out" : Result;
                 var total = Passed + Failed + TimedOut;
-                if (!Finished) return "Incomplete · " + Passed + " / " + total;
-                if (!string.IsNullOrEmpty(AbortReason)) return "Aborted · " + Passed + " / " + total;
+                // A stopped run never learns how many rows it would have had, so "7 / 7" would read
+                // as complete. Say how far it got instead.
+                if (!Finished) return "Incomplete · " + total + (total == 1 ? " row run" : " rows run");
+                if (!string.IsNullOrEmpty(AbortReason)) return "Aborted · " + total + (total == 1 ? " row run" : " rows run");
                 return r + " · " + Passed + " / " + total;
             }
         }

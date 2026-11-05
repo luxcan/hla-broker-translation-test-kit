@@ -20,8 +20,8 @@
 > - "Run" is blocked only when the licence daemon is down, and only warned about when the broker
 >   is down (a self-test pair needs no broker).
 >
-> Checklist items not yet exercised: 4 (Stop in the middle of a long run) and 7 (licence-down
-> blocking Run). See APP-REQUIREMENTS REQ-10.
+> Checklist item 4 (Stop in the middle of a run) is verified through the broker. Item 7 (licence
+> down blocks Run) is not, because it needs the vendor daemon stopped. See APP-REQUIREMENTS REQ-10.
 
 ## 1. Goal
 

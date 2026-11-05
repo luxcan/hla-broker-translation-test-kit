@@ -360,8 +360,8 @@ Open:
   CSV syntax or runner step drives it.
 - ~~**Run history**~~ — **done 2026-11-02**: every GUI run is saved row by row; History reopens it,
   Export writes CSV (APP-REQUIREMENTS REQ-05).
-- **Fresh clone** — licensed inputs are gitignored by design; the copy-in steps are not written
-  down yet.
+- ~~**Fresh clone**~~ — **done 2026-11-05**: SETUP.md opens with a fresh-clone checklist
+  (licence, FOMs, rids, `vrLinkSharp.dll`, build, smoke test, the VR-Exchange side).
 
 ## 11. Source references (in `C:\MAK\vrexchange2.5.1`)
 

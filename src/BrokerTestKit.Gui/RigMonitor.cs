@@ -69,7 +69,7 @@ namespace BrokerTestKit.Gui
         public string PreflightProblem(string server, bool needBroker)
         {
             string detail;
-            if (CheckLicence(server, out detail) == State.Down) return LicenceMessage(server);
+            if (CheckLicence(server, out detail) == State.Down) return LicenceMessage(server, detail);
             if (needBroker && CheckBroker() == State.Down) return BrokerMessage;
             return null;
         }
@@ -79,7 +79,7 @@ namespace BrokerTestKit.Gui
         {
             get
             {
-                if (Licence == State.Down) return LicenceMessage(_licenceServer());
+                if (Licence == State.Down) return LicenceMessage(_licenceServer(), LicenceDetail);
                 if (Broker == State.Down && _brokerMatters()) return BrokerMessage;
                 if (Licence == State.CannotCheck)
                     return "Can't check the MAK licence (" + (LicenceDetail ?? "lmutil.exe not found") +
@@ -97,33 +97,25 @@ namespace BrokerTestKit.Gui
         public const string BrokerMessage =
             "VR-Exchange is not running — nothing will reach B. Start vrx.exe -l BTK-Bridge.xml -G in the VR-Exchange bin64 folder.";
 
-        public static string LicenceMessage(string server)
+        /// <summary>Runs will stall; say why in the Engine's words (REQ-07): vendor daemon down vs no server at all.</summary>
+        public static string LicenceMessage(string server, string detail)
         {
-            return "MAK licence daemon is down — runs will stall. Run lmutil lmreread -c " +
-                   (string.IsNullOrWhiteSpace(server) ? "27000@127.0.0.1" : server.Trim()) + ".";
+            var daemon = detail != null && detail.IndexOf("vendor daemon", StringComparison.OrdinalIgnoreCase) >= 0;
+            return "Runs will stall — " + BrokerTestKit.Engine.LicenceDiagnosis.Advice(
+                daemon ? BrokerTestKit.Engine.LicenceDiagnosis.State.Down : BrokerTestKit.Engine.LicenceDiagnosis.State.NoServer,
+                server, detail);
         }
 
+        /// <summary>The Engine's probe (shared with the CLI's JOIN-timeout diagnosis), mapped to this monitor's states.</summary>
         private static State CheckLicence(string server, out string detail)
         {
-            detail = null;
-            if (!File.Exists(LmUtil)) { detail = "lmutil.exe not found"; return State.CannotCheck; }
-            try
+            var s = BrokerTestKit.Engine.LicenceDiagnosis.Probe(server, out detail);
+            switch (s)
             {
-                var psi = new ProcessStartInfo(LmUtil, "lmstat -c " + (string.IsNullOrWhiteSpace(server) ? "27000@127.0.0.1" : server.Trim()))
-                {
-                    UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true,
-                };
-                using (var p = Process.Start(psi))
-                {
-                    var outText = p.StandardOutput.ReadToEndAsync();
-                    if (!p.WaitForExit(15000)) { try { p.Kill(); } catch { } detail = "lmutil timed out"; return State.CannotCheck; }
-                    var text = outText.Result ?? "";
-                    if (text.IndexOf("maklmgrd: UP", StringComparison.OrdinalIgnoreCase) >= 0) return State.Ok;
-                    detail = text.IndexOf("maklmgrd", StringComparison.OrdinalIgnoreCase) >= 0 ? "maklmgrd down" : "no licence server answered";
-                    return State.Down;
-                }
+                case BrokerTestKit.Engine.LicenceDiagnosis.State.Ok: return State.Ok;
+                case BrokerTestKit.Engine.LicenceDiagnosis.State.CannotCheck: return State.CannotCheck;
+                default: return State.Down;
             }
-            catch (Exception ex) { detail = ex.Message; return State.CannotCheck; }
         }
 
         private static State CheckBroker()

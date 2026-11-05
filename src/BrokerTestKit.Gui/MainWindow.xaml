@@ -15,18 +15,8 @@
         <!-- =============================================================== sidebar -->
         <Border DockPanel.Dock="Left" Width="248" Background="{DynamicResource SurfaceBackground}"
                 BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,1,0">
-            <DockPanel Margin="12,18,12,14">
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,0,0,18">
-                    <Border Width="30" Height="30" CornerRadius="7" Background="{DynamicResource AppBackground}"
-                            BorderBrush="{DynamicResource Divider}" BorderThickness="1">
-                        <TextBlock Text="&#xE73E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15"
-                                   Foreground="{DynamicResource AccentBackground}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <TextBlock Text="HLA Broker Translation Test Kit" FontWeight="SemiBold" TextWrapping="Wrap"
-                               Width="170" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-
+            <!-- No brand block: the window's title bar already names the app. -->
+            <DockPanel Margin="12,14,12,14">
                 <!-- run box, bottom -->
                 <Button DockPanel.Dock="Bottom" x:Name="RunBox" Click="RunBoxClicked" Margin="0,14,0,0"
                         Style="{StaticResource CardButton}"

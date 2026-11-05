@@ -195,7 +195,25 @@ federation**, coordinated over IPC. GUI/Engine hold no RTI. Evidence: vr-link-kn
 
 ---
 
-## REQ-07 — Licence awareness ⏳
+## REQ-07 — Licence awareness ✅ (2026-11-05)
+
+**Built** (`Engine/LicenceDiagnosis.cs`):
+- **The common failure is silent.** With the licence server unreachable or `maklmgrd` down, a
+  native agent connects to the RTI Assistant, loads the rid and then blocks inside the RTI waiting
+  for a seat. It prints nothing. So `NativeAgentHost.Join` treats a JOIN timeout as the moment to
+  run `lmutil lmstat -c <that agent's server>`. It then says which case applies:
+  - no server answered (check the setting and lmgrd);
+  - vendor daemon down (`lmutil lmreread`, re-seat the dongle);
+  - the licence is fine, so look at the Assistant port, the rid or the FOM.
+- **FlexNet codes are translated into words wherever they appear**: `-4,132` seats exhausted, `-97`
+  daemon down, `-15`/`-96` no server, `-10` expired, `-5` feature missing. The CLI prints a
+  `LICENCE:` line ahead of the stack trace. The GUI's error dialog puts the words first and the raw
+  text underneath, and its banner uses the same advice.
+- **Verified** with the licence server pointed at a dead port (27999): the CLI reported *"No MAK
+  licence server answered at 27999@127.0.0.1. Check the licence server setting… and that the MAK
+  License Manager (lmgrd) is running."* A normal run is unaffected.
+
+Background, as first written:
 
 Each agent consumes one VR-Link `vrl_run` seat; the site licence has **2** (= exactly A + B).
 A third concurrent VR-Link process fails with FlexNet `-4,132`.
@@ -232,8 +250,9 @@ un-smoke.bat` (exit code 0):
 | `WorldLocation` | stock struct | 24 | identical |
 | `EntityIdentifier` | stock struct | 6 | identical |
 
-Remaining: the same agent for **HLA Evolved** (B side), and a `NativeAgentHost` so the Engine
-spawns it. `AgentHost` already takes the exe path as an argument, so nothing there is language-bound.
+**Evolved too ✅** — `btk_agent1516e.cpp` does the same on the B side, and the Engine spawns both
+through `NativeAgentHost`. `tests/native/run-smoke.bat` proves the round trip on both federations,
+and `tests/native/run-bridge.ps1` proves it through VR-Exchange.
 
 ---
 
@@ -337,15 +356,23 @@ behave identically.
 - the saved `# tolerance:` line is correct;
 - the empty state and the delete confirm match the boards.
 
-**Not verified**: Stop in the middle of a long run (the self-test case finishes in 1.3 s), and
-the licence-down banner blocking Run (it needs the vendor daemon stopped).
+**Stop, verified through the broker**: the migrated 12-row GroundVehicle case ran over
+VR-Exchange at about 19 ms per row. Stop after row 7 gave "Aborted", the 7 completed rows saved,
+the rest marked *Not run*, and the run box back to Idle.
+
+**Not verified**: the licence-down banner blocking Run. That needs the vendor daemon stopped,
+which takes the licence away from everything on the machine. The same probe is verified through
+the CLI (REQ-07).
 
 **Remaining polish:** a FOM-diff view between the A and B models, and generating a matched
 sender + receiver template pair from a pair in one step.
 
 ---
 
-## REQ-11 — Build environment ⏳
+## REQ-11 — Build environment ✅
+
+`msbuild HLABrokerTranslationTestKit.sln -p:Configuration=Debug -p:Platform=x64` plus
+`build-native.bat` builds everything; SETUP.md has the fresh-clone steps.
 
 - **.NET target is `v4.7.2`.** The constraint from `vrLinkSharp.dll` is only *CLR v4*; 4.7.2 was
   chosen because it is the oldest targeting pack installed on the dev machine. Any CLR v4

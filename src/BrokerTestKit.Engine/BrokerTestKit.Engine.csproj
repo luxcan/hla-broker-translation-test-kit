@@ -62,6 +62,7 @@
     <Compile Include="CsvTemplateGenerator.cs" />
     <Compile Include="NativeTestRunner.cs" />
     <Compile Include="TestCase.cs" />
+    <Compile Include="LicenceDiagnosis.cs" />
     <Compile Include="TestCaseRunner.cs" />
     <Compile Include="TestRunner.cs" />
     <Compile Include="CsvParser.cs" />

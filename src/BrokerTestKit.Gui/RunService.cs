@@ -273,6 +273,9 @@ namespace BrokerTestKit.Gui
                 st.Report.Classes.Clear();
                 st.Report.Classes.AddRange(report.Classes);
                 try { _s.Store.EndRun(st.RunId, st.Report); } catch { }
+                // Rows a stop or failure never reached: say so rather than leave a spinner.
+                foreach (var row in st.Rows)
+                    if (row.Outcome == "…") { row.Outcome = "Not run"; row.Message = st.Report.AbortReason ?? "not run"; }
                 st.Running = false;
                 _s.Status(st.Report.Aborted ? "ABORTED — " + st.Report.AbortReason
                         : st.Report.AllPassed ? "PASS — " + st.TestCaseName

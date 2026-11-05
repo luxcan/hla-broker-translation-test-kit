@@ -103,6 +103,8 @@ namespace BrokerTestKit.Engine
 
         public string Label { get; private set; }
         public string ExePath { get; private set; }
+        /// <summary>The licence server this agent was started with - what a JOIN timeout gets diagnosed against.</summary>
+        public string LicenceServer { get; private set; }
 
         /// <summary>Raised for every line the agent emits (GUI logs, transcripts).</summary>
         public event Action<string, string> LineReceived;   // (label, line)
@@ -117,6 +119,9 @@ namespace BrokerTestKit.Engine
 
             Label = label;
             ExePath = agentExePath;
+            string lic;
+            LicenceServer = environment != null && environment.TryGetValue("MAKLMGRD_LICENSE_FILE", out lic) && !string.IsNullOrEmpty(lic)
+                ? lic : Environment.GetEnvironmentVariable("MAKLMGRD_LICENSE_FILE");
 
             var psi = new ProcessStartInfo(agentExePath, agentArgs)
             {
@@ -220,7 +225,13 @@ namespace BrokerTestKit.Engine
             if (!string.IsNullOrEmpty(mim)) sb.Append(" mim=").Append(mim);
             sb.Append(" create=").Append(create ? "1" : "0");
 
-            Call(sb.ToString(), timeout ?? TimeSpan.FromSeconds(30));
+            try { Call(sb.ToString(), timeout ?? TimeSpan.FromSeconds(30)); }
+            catch (TimeoutException ex)
+            {
+                // The agent says nothing while the RTI waits for a licence seat (REQ-07), so a
+                // silent JOIN is diagnosed here, against the server this agent was given.
+                throw new TimeoutException(ex.Message + "\n\n" + LicenceDiagnosis.DiagnoseJoinTimeout(LicenceServer), ex);
+            }
         }
 
         /// <summary>

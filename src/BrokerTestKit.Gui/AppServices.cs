@@ -67,10 +67,10 @@ namespace BrokerTestKit.Gui
         public void Fail(string what, string message)
         {
             var msg = message ?? "";
-            if (msg.IndexOf("-4,132", StringComparison.Ordinal) >= 0 ||
-                msg.IndexOf("Licensed number of users", StringComparison.OrdinalIgnoreCase) >= 0)
-                msg = "Licence seats exhausted — another VR-Link/RTI process is already running.\n\n" + msg;
-            Status(what + ": " + message);
+            // REQ-07: the words first, the raw FlexNet/RTI text underneath as evidence.
+            var licence = LicenceDiagnosis.Explain(msg);
+            if (licence != null) msg = licence + "\n\n" + msg;
+            Status(what + ": " + (licence ?? message));
             Dialogs.Inform(Owner, what, msg, true);
         }
 

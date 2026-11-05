@@ -214,8 +214,11 @@ namespace BrokerTestKit.Gui.Views
                 else if (_report.TimedOut > 0) result = "Timeout";
                 else result = _report.Passed > 0 ? "Pass" : "Fail";
                 Verdict.Tag = result;
-                Verdict.Text = (_report.Aborted ? "Aborted" : result == "Timeout" ? "Timed out" : result) +
-                               " · " + _report.Passed + " / " + total;
+                // A saved stopped run doesn't know its planned row count; don't print "7 / 7".
+                Verdict.Text = _report.Aborted && _live == null
+                    ? "Aborted · " + _report.Passed + " passed of " + _report.Steps.Count + " rows run"
+                    : (_report.Aborted ? "Aborted" : result == "Timeout" ? "Timed out" : result) +
+                      " · " + _report.Passed + " / " + total;
                 VerdictSub.Text = _report.Steps.Count + " rows in " +
                                   _report.Duration.TotalSeconds.ToString("F1", CultureInfo.InvariantCulture) + " s · " +
                                   (saved != null ? saved.When : Fmt.When(_report.StartedUtc));
