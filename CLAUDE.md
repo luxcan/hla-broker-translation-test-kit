@@ -56,7 +56,7 @@ them copied in before it builds or runs.
   `RunService.cs` and the licence/broker banner in `RigMonitor.cs`. Every run is saved as it
   happens, and *Export results…* writes CSV, HTML or JUnit XML (by extension). It holds no RTI
   connection - the agents are child processes. The CLI stays the CI entry point (`entity`, `case`,
-  `native`, `template`, `fom` modes). See REQ-10 and `PRPs/gui-redesign-pairs.md`.
+  `native`, `template`, `fom`, `fomdiff` modes). See REQ-10 and `PRPs/gui-redesign-pairs.md`.
   ⚠️ The app-wide implicit `TextBlock` style overrides an inherited Foreground: a button template
   must re-point it (see `LinkButton` in `Themes/Pages.xaml`), or link and danger text renders white.
 - **Custom attributes require the NATIVE agents**, not C#. The C# VR-Link binding has no FOM

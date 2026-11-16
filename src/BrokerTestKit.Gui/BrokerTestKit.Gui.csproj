@@ -83,6 +83,9 @@
     <Compile Include="Views\FomRegistryView.xaml.cs">
       <DependentUpon>FomRegistryView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Views\FomCompareView.xaml.cs">
+      <DependentUpon>FomCompareView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Views\CsvTemplateView.xaml.cs">
       <DependentUpon>CsvTemplateView.xaml</DependentUpon>
     </Compile>
@@ -112,6 +115,10 @@
     <Compile Include="RunService.cs" />
     <Compile Include="RigMonitor.cs" />
     <Page Include="Views\FomRegistryView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Views\FomCompareView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

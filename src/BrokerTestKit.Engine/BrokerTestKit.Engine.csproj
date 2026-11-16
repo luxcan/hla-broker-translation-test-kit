@@ -60,6 +60,7 @@
     <Compile Include="FomParsers.cs" />
     <Compile Include="EntityCsvParser.cs" />
     <Compile Include="CsvTemplateGenerator.cs" />
+    <Compile Include="FomDiff.cs" />
     <Compile Include="NativeTestRunner.cs" />
     <Compile Include="TestCase.cs" />
     <Compile Include="LicenceDiagnosis.cs" />

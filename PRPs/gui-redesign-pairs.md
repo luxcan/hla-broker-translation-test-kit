@@ -335,7 +335,7 @@ tables.
 
 ### Out of scope (separate PRPs)
 - ~~**REQ-13**~~ — done in the same change (APP-REQUIREMENTS REQ-13).
-- FOM-diff view; light theme; JUnit/HTML reports; persisting agent transcripts.
+- ~~FOM-diff view~~ — done later as Compare FOMs (REQ-10). ~~JUnit/HTML reports~~ — done (REQ-05). Still open: light theme; persisting agent transcripts.
 
 ## 6. Decisions (answered by the owner, 2026-11-04)
 

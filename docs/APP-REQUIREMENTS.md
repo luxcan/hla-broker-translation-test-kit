@@ -364,8 +364,33 @@ the rest marked *Not run*, and the run box back to Idle.
 which takes the licence away from everything on the machine. The same probe is verified through
 the CLI (REQ-07).
 
-**Remaining polish:** a FOM-diff view between the A and B models, and generating a matched
-sender + receiver template pair from a pair in one step.
+**Compare FOMs ✅ (2026-11-05)**, reached from Pair details. It is the A and B models side by side,
+class by class (engine: `FomDiff.cs`; CLI: `fomdiff a.omt vs b.xml [modules...] [--class Name]`).
+- Classes match on the path without its root (`BaseEntity.…` on an OMT, `HLAobjectRoot.BaseEntity.…`
+  on an FDD), then on the bare name when that is unique on both sides.
+- Each member is compared by **wire layout**, not by type name. The type is flattened to
+  primitives: records inline, fixed arrays expand, and a one-field text record equals a dynamic
+  char array. Results:
+  - **Same**: the same type name.
+  - **Renamed**: another name, same bytes. OMT `boolean` vs RPR 2.0 `RPRboolean`, and
+    `RTIObjectIdStruct` vs `RTIobjectId`.
+  - **Differs**: a layout the broker has to translate (`ArticulatedParametersArray`).
+  - **Only on A** / **Only on B**.
+
+  A class is *Same*, *Differs* (a member's layout differs) or *Partial* (the shared members
+  agree, but one side has members the other lacks).
+- On the stock bridge pair, RPR 1.0 → RPR 2.0 + B's join modules, 114 classes and
+  interactions match. `GroundVehicle` comes out as 9 same · 27 renamed · 1 differs · 7 only A ·
+  9 only B: `WorldLocation`, `Orientation` and the other dead-reckoning attributes are only on A,
+  because RPR 2.0 carries them inside `Spatial`. `WeaponFire` is *Same* (6 same · 7 renamed).
+- **Create test case from this class** is the matched template pair in one step. It opens Add
+  test case with a Send sheet from A's FOM and a Receive sheet from B's, both holding exactly
+  the Same + Renamed members.
+  - The name is free, the chips use the bare class name, and leaving unsaved asks first.
+  - Saving warns about any Send row that has only an entityId, because A would publish nothing
+    and the step could only fail.
+- **Verified through the GUI** on the bridge pair and the self-test pair: compare, filter,
+  create, the empty-row warning, the discard prompt, and a saved generated case that runs.
 
 ---
 

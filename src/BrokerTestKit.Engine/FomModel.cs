@@ -717,6 +717,75 @@ namespace BrokerTestKit.Engine
             return "hex";
         }
 
+        /// <summary>
+        /// The shape of a type on the wire, without its names: "uint8", "{float64,float64,float64}",
+        /// "[uint8 x 11]". Two FOMs that spell a type differently (OMT <c>boolean</c>, RPR 2.0
+        /// <c>RPRboolean</c>) but lay out the same bytes get the same signature, which is what
+        /// lets <see cref="FomDiff"/> tell a rename from a real change. Endianness is ignored:
+        /// HLA 1.3 has no way to state it.
+        /// </summary>
+        public string WireSignature(string typeName)
+        {
+            var tokens = new List<string>();
+            Flatten(typeName, 0, tokens);
+            // run-length for reading: "uint8*12" rather than twelve uint8s
+            var sb = new StringBuilder();
+            for (int i = 0; i < tokens.Count; )
+            {
+                int j = i;
+                while (j < tokens.Count && tokens[j] == tokens[i]) j++;
+                if (sb.Length > 0) sb.Append(',');
+                sb.Append(tokens[i]);
+                if (j - i > 1) sb.Append('*').Append((j - i).ToString(CultureInfo.InvariantCulture));
+                i = j;
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// The type as a flat list of wire tokens. Records are inlined and fixed arrays expanded,
+        /// so <c>{octet, octet[11]}</c> and twelve octet fields meet; a one-field record holding
+        /// text and a dynamic char array both come out as "text" (OMT <c>RTIObjectIdStruct</c>
+        /// against RPR 2.0 <c>RTIobjectId</c>).
+        /// </summary>
+        private void Flatten(string typeName, int depth, List<string> outp)
+        {
+            if (string.IsNullOrEmpty(typeName)) { outp.Add("?"); return; }
+            if (depth > 12 || outp.Count > 4096) { outp.Add("..."); return; }
+            var basic = BasicNameOf(typeName);
+            var k = KindOfBasic(basic);
+            if (k != null)
+            {
+                outp.Add(k != "string" ? k : BuiltinSize(basic) > 0 ? "char" : "text");
+                return;
+            }
+            FomType t;
+            if (!Types.TryGetValue(typeName, out t) || t == null) { outp.Add("?" + typeName); return; }
+            switch (t.Kind)
+            {
+                case FomKind.FixedRecord:
+                    foreach (var f in t.Fields) Flatten(f.DataType, depth + 1, outp);
+                    return;
+                case FomKind.Array:
+                    int n;
+                    var fixedCount = int.TryParse(t.Cardinality, NumberStyles.Integer, CultureInfo.InvariantCulture, out n) && n >= 0;
+                    var elem = new List<string>();
+                    Flatten(t.ElementType, depth + 1, elem);
+                    if (fixedCount && n * elem.Count <= 4096) { for (int i = 0; i < n; i++) outp.AddRange(elem); return; }
+                    var e = string.Join(",", elem.ToArray());
+                    outp.Add(e == "char" ? "text" : "[" + e + "]*");
+                    return;
+                case FomKind.Variant:
+                    var d = new List<string>();
+                    Flatten(t.DiscriminantType, depth + 1, d);
+                    outp.Add("variant<" + string.Join(",", d.ToArray()) + "|" + t.Alternatives.Count + ">");
+                    return;
+                default:
+                    outp.Add("?" + typeName);
+                    return;
+            }
+        }
+
         /// <summary>Follow simple/enumerated indirection down to the underlying basic type name.</summary>
         private string BasicNameOf(string typeName)
         {

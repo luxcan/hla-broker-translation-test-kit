@@ -43,6 +43,7 @@ namespace BrokerTestKit.Cli
                     case "run": return RunCsv(args);
                     case "native": return RunNative(args);
                     case "fom": return RunFom(args);
+                    case "fomdiff": return RunFomDiff(args);
                     case "entity": return RunEntity(args);
                     case "case": return RunCase(args);
                     case "template": return RunTemplate(args);
@@ -973,6 +974,35 @@ namespace BrokerTestKit.Cli
                     probe, r.TypeName, r.Offset, r.Size, r.CodecSpec));
             }
             return bad == 0 ? 0 : 1;
+        }
+
+        /// <summary>
+        /// REQ-10: compare the FOMs of the two sides of a crossing.
+        /// <c>fomdiff a.omt a.fed vs b.xml [--class GroundVehicle]</c>. Exit 0 always - a
+        /// difference is information, not a failure (translating it is the broker's job).
+        /// </summary>
+        private static int RunFomDiff(string[] args)
+        {
+            var a = new List<string>(); var b = new List<string>();
+            string cls = null; var side = a;
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--class" && i + 1 < args.Length) { cls = args[++i]; continue; }
+                if (string.Equals(args[i], "vs", StringComparison.OrdinalIgnoreCase)) { side = b; continue; }
+                side.Add(Resolve(args[i]));
+            }
+            if (a.Count == 0 || b.Count == 0)
+            {
+                Console.Error.WriteLine("usage: fomdiff <A fom files...> vs <B fom files...> [--class Name]");
+                return 2;
+            }
+            var ma = FomLoader.Load(a.ToArray());
+            var mb = FomLoader.Load(b.ToArray());
+            Console.WriteLine("A: " + ma.Summary());
+            Console.WriteLine("B: " + mb.Summary());
+            Console.WriteLine();
+            Console.Write(FomDiff.Report(FomDiff.Compare(ma, mb), cls));
+            return 0;
         }
 
         /// <summary>Resolve a bare filename against RTI_CONFIG so tests can name FOMs, not paths.</summary>

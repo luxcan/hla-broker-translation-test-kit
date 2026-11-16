@@ -28,7 +28,7 @@ namespace BrokerTestKit.Gui.Views
         private readonly List<SheetCard> _cards = new List<SheetCard>();
         private bool _dirty, _loading = true;
 
-        public TestCaseEditView(AppServices s, long pairId, long caseId)
+        public TestCaseEditView(AppServices s, long pairId, long caseId, NavTarget prefill = null)
         {
             _s = s;
             _caseId = caseId;
@@ -61,10 +61,59 @@ namespace BrokerTestKit.Gui.Views
                     AddCard(sh.IsSend, CsvGrid.FromText(text, null));
                 }
             }
-            else Timeout.Text = "15";
+            else
+            {
+                Timeout.Text = "15";
+                if (prefill != null && prefill.PrefillA != null && prefill.PrefillB != null) Prefill(prefill);
+            }
 
             Rebuild();
             _loading = false;
+        }
+
+        /// <summary>
+        /// A matched template pair in one step (REQ-10): a Send sheet for A's class and a Receive
+        /// sheet for B's, both holding the same members, so each Receive column has a Send twin.
+        /// </summary>
+        private void Prefill(NavTarget p)
+        {
+            var ma = ModelOf(true); var mb = ModelOf(false);
+            if (ma == null || mb == null) return;
+            try
+            {
+                foreach (var send in new[] { true, false })
+                {
+                    var opt = new CsvTemplateGenerator.Options
+                    {
+                        ForExpectations = !send, SampleRows = 2, FloatTolerance = 0.001,
+                        Include = p.PrefillMembers != null && p.PrefillMembers.Count > 0 ? new List<string>(p.PrefillMembers) : null,
+                    };
+                    var model = send ? ma : mb;
+                    var text = CsvTemplateGenerator.Generate(model, Bare(model, send ? p.PrefillA : p.PrefillB), opt);
+                    AddCard(send, CsvGrid.FromText(text, null));
+                }
+                CaseName.Text = FreeName(TemplateHelpers.Leaf(p.PrefillA));
+                _dirty = true;          // generated, not saved: leaving should ask
+                _s.Status("Matched sheets for " + TemplateHelpers.Leaf(p.PrefillA) + ": " +
+                          (p.PrefillMembers == null ? 0 : p.PrefillMembers.Count) + " shared member(s). Fill in the rows, then save.");
+            }
+            catch (Exception ex) { _s.Fail("Could not generate the matched sheets", ex); }
+        }
+
+        /// <summary>"GroundVehicle", or "GroundVehicle 2" when the pair already has one.</summary>
+        private string FreeName(string stem)
+        {
+            var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var t in _s.Store.TestCases(_pairId)) taken.Add(t.Name);
+            if (!taken.Contains(stem)) return stem;
+            for (int n = 2; ; n++) if (!taken.Contains(stem + " " + n)) return stem + " " + n;
+        }
+
+        /// <summary>The bare class name when it still names the same class - what a hand-written sheet says.</summary>
+        private static string Bare(FomModel m, string full)
+        {
+            var leaf = TemplateHelpers.Leaf(full);
+            return string.Equals(m.RtiClassName(leaf), m.RtiClassName(full), StringComparison.OrdinalIgnoreCase) ? leaf : full;
         }
 
         private static string Where(ConnectionRecord c)
@@ -227,6 +276,19 @@ namespace BrokerTestKit.Gui.Views
             if (!_cards.Exists(c => c.Send)) { _s.Fail("Can't save", "Add at least one Send class."); return; }
             if (!_cards.Exists(c => !c.Send)) { _s.Fail("Can't save", "Add at least one Receive class - otherwise there is nothing to check on B."); return; }
 
+            // A Send row with no values publishes nothing, so its step can only fail - and a
+            // freshly generated sheet (Compare FOMs, + Class) starts exactly like that.
+            var empty = new List<string>();
+            foreach (var c in _cards)
+                foreach (var id in c.EmptyRows()) empty.Add(TemplateHelpers.Leaf(c.ClassName) + " " + id);
+            if (empty.Count > 0 &&
+                !Dialogs.Confirm(_s.Owner, "Rows with no values",
+                    (empty.Count == 1 ? "This Send row has" : "These Send rows have") + " only an entityId, so A would publish no attribute " +
+                    "and the step can only fail: " + string.Join(", ", empty.Count > 6 ? empty.GetRange(0, 6).ToArray() : empty.ToArray()) +
+                    (empty.Count > 6 ? " and " + (empty.Count - 6) + " more" : "") + ". Save anyway?",
+                    "Save anyway", "Keep editing", false))
+                return;
+
             // Validate exactly as a run will read it: every sheet against its own side's FOM,
             // ids unique, references resolvable, every Receive row tied to a Send row.
             var texts = new List<KeyValuePair<SheetCard, string>>();
@@ -320,6 +382,26 @@ namespace BrokerTestKit.Gui.Views
             _sheet.Table.RowChanged += (s, e) => _owner.CardChanged();
             _sheet.Table.RowDeleted += (s, e) => { _owner.CardChanged(); UpdateInfo(); };
             _sheet.Table.TableNewRow += (s, e) => UpdateInfo();
+        }
+
+        /// <summary>The ids of Send rows with nothing but an entityId: A would publish no attribute.</summary>
+        internal List<string> EmptyRows()
+        {
+            var ids = new List<string>();
+            if (!Send) return ids;
+            foreach (DataRow r in _sheet.Table.Rows)
+            {
+                if (r.RowState == DataRowState.Deleted || r == _tolRow) continue;
+                string id = null; var any = false;
+                foreach (DataColumn c in _sheet.Table.Columns)
+                {
+                    var v = Convert.ToString(r[c], CultureInfo.InvariantCulture);
+                    if (string.Equals(c.ColumnName, "entityId", StringComparison.OrdinalIgnoreCase)) { id = v; continue; }
+                    if (!string.IsNullOrWhiteSpace(v)) { any = true; break; }
+                }
+                if (!any && !string.IsNullOrWhiteSpace(id)) ids.Add(id.Trim());
+            }
+            return ids;
         }
 
         // ------------------------------------------------------------ tolerance --

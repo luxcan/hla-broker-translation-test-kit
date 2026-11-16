@@ -11,6 +11,7 @@
 
             <DockPanel Margin="0,0,0,18">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                    <Button Content="Compare FOMs" Click="CompareFoms"/>
                     <Button Content="Edit pair" Click="EditPair"/>
                     <Button x:Name="RunAllButton" Content="Run all test cases" Click="RunAll"/>
                     <Button Content="+ Add test case" Style="{StaticResource AccentButton}" Click="AddTestCase" Margin="0"/>

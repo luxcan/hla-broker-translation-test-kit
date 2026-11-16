@@ -118,7 +118,8 @@ namespace BrokerTestKit.Gui
                 case Page.Pairs: return new Views.PairsView(_s);
                 case Page.PairDetail: return new Views.PairDetailView(_s, t.PairId);
                 case Page.PairEdit: return new Views.PairEditView(_s, t.PairId);
-                case Page.TestCaseEdit: return new Views.TestCaseEditView(_s, t.PairId, t.TestCaseId);
+                case Page.TestCaseEdit: return new Views.TestCaseEditView(_s, t.PairId, t.TestCaseId, t);
+                case Page.FomCompare: return new Views.FomCompareView(_s, t.PairId);
                 case Page.TestCaseResult: return new Views.TestCaseResultView(_s, t.TestCaseId, t.RunId);
                 case Page.AllResults: return new Views.AllResultsView(_s, t.FilterToPair ? t.PairId : (long?)null);
                 case Page.CsvTemplate: return new Views.CsvTemplateView(_s);

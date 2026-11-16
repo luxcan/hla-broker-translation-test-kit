@@ -9,7 +9,7 @@ namespace BrokerTestKit.Gui
     /// <summary>The screens (PRP §3). Navigation is by name, never by index (R1).</summary>
     public enum Page
     {
-        Dashboard, Pairs, PairDetail, PairEdit, TestCaseEdit, TestCaseResult, AllResults, CsvTemplate, FomRegistry,
+        Dashboard, Pairs, PairDetail, PairEdit, TestCaseEdit, TestCaseResult, AllResults, CsvTemplate, FomRegistry, FomCompare,
     }
 
     /// <summary>Where to go: the page plus the ids it is about.</summary>
@@ -23,6 +23,10 @@ namespace BrokerTestKit.Gui
         public long RunId;
         /// <summary>AllResults: pre-filter to this pair.</summary>
         public bool FilterToPair;
+        /// <summary>TestCaseEdit, new case only: start with a matched Send (A) and Receive (B) sheet
+        /// for these classes, holding these members (from Compare FOMs).</summary>
+        public string PrefillA, PrefillB;
+        public List<string> PrefillMembers;
 
         public static NavTarget To(Page p) { return new NavTarget { Page = p }; }
     }

@@ -108,6 +108,7 @@ namespace BrokerTestKit.Gui.Views
 
         private void OpenPairs(object sender, RoutedEventArgs e) { _s.Navigate(Page.Pairs); }
         private void EditPair(object sender, RoutedEventArgs e) { _s.Navigate(new NavTarget { Page = Page.PairEdit, PairId = _pairId }); }
+        private void CompareFoms(object sender, RoutedEventArgs e) { _s.Navigate(new NavTarget { Page = Page.FomCompare, PairId = _pairId }); }
         private void AddTestCase(object sender, RoutedEventArgs e) { _s.Navigate(new NavTarget { Page = Page.TestCaseEdit, PairId = _pairId }); }
         private void OpenAllResults(object sender, RoutedEventArgs e) { _s.Navigate(new NavTarget { Page = Page.AllResults, PairId = _pairId, FilterToPair = true }); }
 
