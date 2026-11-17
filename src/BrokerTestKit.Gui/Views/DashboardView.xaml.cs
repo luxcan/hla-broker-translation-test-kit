@@ -56,6 +56,7 @@ namespace BrokerTestKit.Gui.Views
 
         private void NewPair(object sender, RoutedEventArgs e) { _s.Navigate(new NavTarget { Page = Page.PairEdit, PairId = 0 }); }
         private void OpenRegistry(object sender, RoutedEventArgs e) { _s.Navigate(Page.FomRegistry); }
+        private void AddFom(object sender, RoutedEventArgs e) { _s.Navigate(Page.FomAdd); }
         private void OpenPairs(object sender, RoutedEventArgs e) { _s.Navigate(Page.Pairs); }
         private void OpenAllResults(object sender, RoutedEventArgs e) { _s.Navigate(Page.AllResults); }
         private void OpenLastRun(object sender, RoutedEventArgs e) { Open(_last); }

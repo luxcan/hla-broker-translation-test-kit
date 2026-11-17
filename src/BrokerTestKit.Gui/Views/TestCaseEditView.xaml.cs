@@ -37,12 +37,12 @@ namespace BrokerTestKit.Gui.Views
             _case = caseId == 0 ? null : _s.Store.TestCase(caseId);
             _pairId = _case != null ? _case.PairId : pairId;
             _pair = _s.Store.Pair(_pairId);
-            if (_pair == null) { Title.Text = "Pair not found"; return; }
+            if (_pair == null) { Title.Text = "Pair Not Found"; return; }
             _s.SidesOf(_pair, out _a, out _b);
 
             CrumbPair.Content = _pair.Name;
-            CrumbHere.Text = _case == null ? "Add test case" : "Edit test case";
-            Title.Text = _case == null ? "Add test case" : "Edit test case";
+            CrumbHere.Text = _case == null ? "Add Test Case" : "Edit Test Case";
+            Title.Text = _case == null ? "Add Test Case" : "Edit Test Case";
             SaveButton.Content = _case == null ? "Save test case" : "Save changes";
             DeleteButton.Visibility = _case == null ? Visibility.Collapsed : Visibility.Visible;
             Lead.Text = "One behaviour to check on " + _pair.Name + ": what you Send on A, and what B must Receive " +

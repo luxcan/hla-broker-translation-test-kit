@@ -51,7 +51,7 @@ attributes to *existing* RPR classes, so it is delivered as a **single merged FD
 side therefore needs only `fed=<merged FDD>`; `fomModules` stays supported but is not the primary
 path. The app should still accept both shapes and say plainly which one it is dealing with.
 
-**UI ✅** — implemented in the GUI's *FOM registry · Add a FOM* form (REQ-10); a pair then picks a
+**UI ✅** — implemented in the GUI's *Add New FOM* page, reached from the FOM Registry (REQ-10); a pair then picks a
 registered FOM per side. Selecting HLA 1.3 shows the `.fed`
 and the `.omt` labelled "REQUIRED for datatypes"; selecting Evolved swaps to the FDD and reveals the
 FOM-modules and MIM fields. 1516-only fields are never offered to a 1.3 federation. Loading a FOM
@@ -296,7 +296,7 @@ a native fault kills an agent, not the app.
 ```
 Dashboard ──► Pairs ──► Pair details ──► Add / edit test case ──(save/cancel)──► Pair details
                               └──► Test case result ◄── (Run, Run again, any run anywhere)
-Sidebar: Dashboard · Pairs   …   Tools: CSV template · FOM registry   …   [Test run box]
+Sidebar: Dashboard · Pairs   …   Tools: CSV Template · FOM Registry   …   [Test run box]
 ```
 
 - **Dashboard**: library counts, last run, and the last 10 runs. On first launch it shows the
@@ -336,6 +336,22 @@ Sidebar: Dashboard · Pairs   …   Tools: CSV template · FOM registry   …   
   with `lmutil lmstat`, which also blocks Run), VR-Exchange not on TCP 5111 (when a non-self-test
   pair exists), and a milder "can't check" when lmutil is missing. Checks run at start, before
   every run, and every 60 s.
+- **Page titles are title case** (2026-11-17): page titles, the breadcrumb item naming the page, and
+  the sidebar ("FOM Registry", "CSV Template", "All Results", "Edit Pair", "Add Test Case"). Pair
+  and test case names stay as the user typed them; section headings and buttons are sentence case.
+- **FOM Registry and Add New FOM are two pages** (2026-11-17, mockup board *Add New FOM*). The
+  registry lists the registered FOMs only, with Update, Re-check all and Remove. *+ Add New FOM*
+  (also on the Dashboard's first launch) opens the form on its own page:
+  - Register returns to the registry with the new FOM selected; a failure stays on the form with
+    the reason.
+  - Update, or a double-click on a row, opens the same page as *Update FOM* with that FOM's files.
+    The name is locked there: a changed name would register a second FOM and leave the pairs on
+    the old files. Re-importing a workspace copy keeps the file's recorded origin (it used to
+    become `<hash>.fed`, which the Files column then showed).
+  - Cancel, or leaving with unregistered details, asks first.
+  - Clicking the highlighted sidebar item (FOM Registry on Add New FOM, Pairs on Pair details) now
+    goes to that page; before, it did nothing. ⚠️ Not verified by hand: the test rig has no real
+    mouse input.
 - **Tools**: the CSV template tool (preview now inline) and the FOM registry, which gains a
   *Used by* column and a remove guard.
 

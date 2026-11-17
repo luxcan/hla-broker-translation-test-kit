@@ -34,7 +34,7 @@
                             </StackPanel>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <Button Content="FOM registry" Style="{StaticResource LinkButton}" Click="OpenRegistry" Margin="0,0,16,0"/>
+                            <Button Content="FOM Registry" Style="{StaticResource LinkButton}" Click="OpenRegistry" Margin="0,0,16,0"/>
                             <Button Content="All pairs" Style="{StaticResource LinkButton}" Click="OpenPairs"/>
                         </StackPanel>
                     </StackPanel>
@@ -105,7 +105,7 @@
                         <TextBlock Text="2.  Create a pair — what you Send on A and where B must Receive it." Margin="0,0,0,4"/>
                         <TextBlock Text="3.  Add a test case and run it." Margin="0,0,0,14"/>
                         <StackPanel Orientation="Horizontal">
-                            <Button Content="Add a FOM" Click="OpenRegistry"/>
+                            <Button Content="Add New FOM" Click="AddFom"/>
                             <Button Content="Create your first pair" Style="{StaticResource AccentButton}" Click="NewPair"/>
                         </StackPanel>
                     </StackPanel>

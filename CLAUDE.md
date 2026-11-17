@@ -49,7 +49,7 @@ them copied in before it builds or runs.
   `ExerciseConnection.addMessageHandler`/`sendMessage`) — FOM-agnostic, by-name, raw `byte[]`.
 - The harness is **independent** of the C++ broker (tests it as a black box).
 - **GUI = `src/BrokerTestKit.Gui`** (WPF): Dashboard → Pairs → Pair details → Add / edit test
-  case → Test case result, plus Tools (CSV template, FOM registry). Pairs and test cases are saved
+  case → Test case result, plus Tools (CSV Template, FOM Registry → Add New FOM). Pairs and test cases are saved
   in `btk.db`; test-case sheets are content-addressed assets; GUI runs go through
   `TestCaseRunner`, the same as the CLI's `case` mode. Each screen is a `UserControl` in `Views/`
   with name-based navigation (`Page` enum, never an index). The run thread lives in

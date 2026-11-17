@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using BrokerTestKit.Engine;
 
 namespace BrokerTestKit.Gui
@@ -123,7 +124,8 @@ namespace BrokerTestKit.Gui
                 case Page.TestCaseResult: return new Views.TestCaseResultView(_s, t.TestCaseId, t.RunId);
                 case Page.AllResults: return new Views.AllResultsView(_s, t.FilterToPair ? t.PairId : (long?)null);
                 case Page.CsvTemplate: return new Views.CsvTemplateView(_s);
-                case Page.FomRegistry: return new Views.FomRegistryView(_s);
+                case Page.FomRegistry: return new Views.FomRegistryView(_s, t.FomName);
+                case Page.FomAdd: return new Views.FomAddView(_s, t.FomName);
             }
             throw new ArgumentOutOfRangeException("page", t.Page.ToString());
         }
@@ -143,6 +145,7 @@ namespace BrokerTestKit.Gui
                     case Page.CsvTemplate:
                         MainNav.SelectedIndex = -1; ToolsNav.SelectedIndex = 0; break;
                     case Page.FomRegistry:
+                    case Page.FomAdd:
                         MainNav.SelectedIndex = -1; ToolsNav.SelectedIndex = 1; break;
                     default:
                         MainNav.SelectedIndex = 1; ToolsNav.SelectedIndex = -1; break;
@@ -161,6 +164,22 @@ namespace BrokerTestKit.Gui
         {
             if (_syncingNav || ToolsNav.SelectedIndex < 0) return;
             Navigate(NavTarget.To(ToolsNav.SelectedIndex == 0 ? Page.CsvTemplate : Page.FomRegistry));
+        }
+
+        /// <summary>
+        /// A click on the item that is already highlighted changes no selection, so SelectionChanged
+        /// never fires - yet Pairs is highlighted on Pair details, and FOM Registry on Add New FOM.
+        /// Go to that item's own page when the click lands somewhere else.
+        /// </summary>
+        private void NavItemClicked(object sender, MouseButtonEventArgs e)
+        {
+            var list = (ListBox)sender;
+            var item = ItemsControl.ContainerFromElement(list, e.OriginalSource as DependencyObject) as ListBoxItem;
+            if (item == null || !item.IsSelected || _current == null) return;
+            var index = list.ItemContainerGenerator.IndexFromContainer(item);
+            var page = list == MainNav ? (index == 0 ? Page.Dashboard : Page.Pairs)
+                                       : (index == 0 ? Page.CsvTemplate : Page.FomRegistry);
+            if (_current.Page != page) Navigate(NavTarget.To(page));
         }
 
         // ---------------------------------------------------------------- run box --

@@ -6,9 +6,9 @@
             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                 <Button Content="Dashboard" Style="{StaticResource LinkButton}" Click="OpenDashboard"/>
                 <TextBlock Text="  /  " Style="{StaticResource Muted}" VerticalAlignment="Center"/>
-                <TextBlock Text="All results" VerticalAlignment="Center"/>
+                <TextBlock Text="All Results" VerticalAlignment="Center"/>
             </StackPanel>
-            <TextBlock Text="All results" Style="{StaticResource PageTitle}"/>
+            <TextBlock Text="All Results" Style="{StaticResource PageTitle}"/>
             <TextBlock Style="{StaticResource PageLead}" Text="Every saved run, newest first."/>
 
             <StackPanel Orientation="Horizontal" Margin="0,16,0,14">

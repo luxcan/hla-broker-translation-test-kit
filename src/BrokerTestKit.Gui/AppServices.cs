@@ -9,7 +9,7 @@ namespace BrokerTestKit.Gui
     /// <summary>The screens (PRP §3). Navigation is by name, never by index (R1).</summary>
     public enum Page
     {
-        Dashboard, Pairs, PairDetail, PairEdit, TestCaseEdit, TestCaseResult, AllResults, CsvTemplate, FomRegistry, FomCompare,
+        Dashboard, Pairs, PairDetail, PairEdit, TestCaseEdit, TestCaseResult, AllResults, CsvTemplate, FomRegistry, FomCompare, FomAdd,
     }
 
     /// <summary>Where to go: the page plus the ids it is about.</summary>
@@ -27,6 +27,8 @@ namespace BrokerTestKit.Gui
         /// for these classes, holding these members (from Compare FOMs).</summary>
         public string PrefillA, PrefillB;
         public List<string> PrefillMembers;
+        /// <summary>FomRegistry: the FOM to select on arrival. FomAdd: the FOM to update (null = a new one).</summary>
+        public string FomName;
 
         public static NavTarget To(Page p) { return new NavTarget { Page = p }; }
     }

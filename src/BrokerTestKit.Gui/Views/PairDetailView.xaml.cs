@@ -42,7 +42,7 @@ namespace BrokerTestKit.Gui.Views
         private void Load()
         {
             _pair = _s.Store.Pair(_pairId);
-            if (_pair == null) { Title.Text = "Pair not found"; return; }
+            if (_pair == null) { Title.Text = "Pair Not Found"; return; }
 
             Crumb.Text = _pair.Name;
             Title.Text = _pair.Name;

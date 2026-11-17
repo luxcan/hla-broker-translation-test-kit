@@ -42,8 +42,8 @@ namespace BrokerTestKit.Gui.Views
             if (IsNew)
             {
                 _pair = new PairRecord();
-                Title.Text = "New pair";
-                CrumbHere.Text = "New pair";
+                Title.Text = "New Pair";
+                CrumbHere.Text = "New Pair";
                 CrumbSep.Visibility = CrumbPair.Visibility = Visibility.Collapsed;
                 DeleteButton.Visibility = Visibility.Collapsed;
 
@@ -63,10 +63,10 @@ namespace BrokerTestKit.Gui.Views
             }
 
             _pair = _s.Store.Pair(_pairId);
-            if (_pair == null) { Title.Text = "Pair not found"; return; }
-            Title.Text = "Edit pair";
+            if (_pair == null) { Title.Text = "Pair Not Found"; return; }
+            Title.Text = "Edit Pair";
             CrumbPair.Content = _pair.Name;
-            CrumbHere.Text = "Edit pair";
+            CrumbHere.Text = "Edit Pair";
             PairName.Text = _pair.Name;
             _lastSuggestion = "\u0000";             // the stored name is the user's, never a suggestion
             SelfTest.IsChecked = _pair.SelfTest;

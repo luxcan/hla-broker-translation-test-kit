@@ -8,98 +8,48 @@
         </Grid.RowDefinitions>
 
         <DockPanel Margin="0,0,0,18">
-            <Button DockPanel.Dock="Right" Content="Add a FOM" Style="{StaticResource AccentButton}"
-                    Click="FocusForm" VerticalAlignment="Top"/>
+            <Button DockPanel.Dock="Right" Content="+ Add New FOM" Style="{StaticResource AccentButton}"
+                    Click="AddFom" VerticalAlignment="Top" Margin="0"/>
             <StackPanel>
-                <TextBlock Text="FOM registry" Style="{StaticResource PageTitle}"/>
+                <TextBlock Text="FOM Registry" Style="{StaticResource PageTitle}"/>
                 <TextBlock Style="{StaticResource PageLead}" MaxWidth="900" HorizontalAlignment="Left"
-                           Text="Register each FOM once and pairs refer to it by name. Files are parsed and checked the moment you register, so a missing .omt or a malformed FDD shows up here rather than halfway through a run."/>
+                           Text="Every FOM a pair can use. Register the files once; pairs pick them by name and the CSV template reads their classes."/>
             </StackPanel>
         </DockPanel>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="16"/>
-                <ColumnDefinition Width="400"/>
-            </Grid.ColumnDefinitions>
-
-            <Border Style="{StaticResource Card}">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="Registered FOMs" Style="{StaticResource CardTitle}" Margin="0,0,0,10"/>
-                    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Muted}" Margin="0,8,0,0"
-                               Text="A FOM used by a pair cannot be removed - change or delete the pair first."/>
-                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+        <Border Grid.Row="1" Style="{StaticResource Card}">
+            <DockPanel>
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button Content="Update" Click="UpdateFom"/>
                         <Button Content="Re-check all" Click="RecheckAll"/>
-                        <Button Content="Remove" Click="RemoveFom"/>
+                        <Button Content="Remove" Click="RemoveFom" Margin="0"/>
                     </StackPanel>
-                    <DataGrid x:Name="FomList" Style="{StaticResource ListGrid}" SelectionChanged="FomSelected">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="1.4*"/>
-                            <DataGridTextColumn Header="HLA" Binding="{Binding Version}" Width="Auto"/>
-                            <DataGridTextColumn Header="Files" Binding="{Binding Files}" Width="1.5*"/>
-                            <DataGridTextColumn Header="Contents" Binding="{Binding Status}" Width="1.8*"/>
-                            <DataGridTextColumn Header="Used by" Binding="{Binding UsedByText}" Width="80"/>
-                        </DataGrid.Columns>
-                        <DataGrid.RowStyle>
-                            <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Ok}" Value="False">
-                                        <Setter Property="Background" Value="{DynamicResource OutcomeWarnRow}"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </DataGrid.RowStyle>
-                    </DataGrid>
+                    <TextBlock x:Name="Count" Text="Registered FOMs" Style="{StaticResource CardTitle}" VerticalAlignment="Center"/>
                 </DockPanel>
-            </Border>
-
-            <Border Grid.Column="2" Style="{StaticResource Card}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <TextBlock Text="Add a FOM" Style="{StaticResource CardTitle}"/>
-                        <Label Content="Name"/>
-                        <TextBox x:Name="FName"/>
-
-                        <Label Content="HLA version"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
-                            <RadioButton x:Name="F13" Content="HLA 1.3" IsChecked="True" GroupName="FVer"
-                                         Margin="0,0,18,0" Checked="FomVersionChanged"/>
-                            <RadioButton x:Name="F1516" Content="HLA Evolved" GroupName="FVer" Checked="FomVersionChanged"/>
-                        </StackPanel>
-
-                        <Label x:Name="FStructLabel" Content="FED (.fed)  — what the RTI joins with"/>
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseStruct" MinWidth="80" Margin="6,0,0,0"/>
-                            <TextBox x:Name="FStruct"/>
-                        </DockPanel>
-
-                        <StackPanel x:Name="FOmtRow">
-                            <Label Content="OMT (.omt)  — REQUIRED: the .fed has no datatypes"/>
-                            <DockPanel>
-                                <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseOmt" MinWidth="80" Margin="6,0,0,0"/>
-                                <TextBox x:Name="FOmt"/>
-                            </DockPanel>
-                        </StackPanel>
-
-                        <StackPanel x:Name="FEvolvedRows" Visibility="Collapsed">
-                            <Label Content="Join modules (comma separated — merged at JOIN)"/>
-                            <TextBox x:Name="FModules"/>
-                            <Label Content="MIM (optional)"/>
-                            <TextBox x:Name="FMim"/>
-                        </StackPanel>
-
-                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
-                            <Button Content="Register" Click="RegisterFom" Style="{StaticResource AccentButton}" MinWidth="110"/>
-                            <Button Content="Clear" Click="ClearFomForm"/>
-                        </StackPanel>
-
-                        <Border x:Name="FResultBox" Margin="0,14,0,0" Style="{StaticResource InsetCard}" Visibility="Collapsed">
-                            <TextBlock x:Name="FResult" TextWrapping="Wrap" FontSize="12"/>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </Border>
-        </Grid>
+                <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Muted}" Margin="0,10,0,0"
+                           Text="A FOM used by a pair can't be removed - change or delete those pairs first. Double-click a FOM to point it at new files."/>
+                <TextBlock x:Name="NoFoms" DockPanel.Dock="Top" Style="{StaticResource Muted}" Margin="0,8,0,0" Visibility="Collapsed"
+                           Text="No FOMs registered yet. Add New FOM registers the files a federation speaks: the .fed and .omt for HLA 1.3, or the FDD and its modules for HLA Evolved."/>
+                <DataGrid x:Name="FomList" Style="{StaticResource ListGrid}" MouseDoubleClick="RowDoubleClick">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="1.4*"/>
+                        <DataGridTextColumn Header="HLA" Binding="{Binding Version}" Width="Auto"/>
+                        <DataGridTextColumn Header="Files" Binding="{Binding Files}" Width="1.5*"/>
+                        <DataGridTextColumn Header="Contents" Binding="{Binding Status}" Width="1.8*"/>
+                        <DataGridTextColumn Header="Used by" Binding="{Binding UsedByText}" Width="80"/>
+                    </DataGrid.Columns>
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Ok}" Value="False">
+                                    <Setter Property="Background" Value="{DynamicResource OutcomeWarnRow}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+                </DataGrid>
+            </DockPanel>
+        </Border>
     </Grid>
 </UserControl>

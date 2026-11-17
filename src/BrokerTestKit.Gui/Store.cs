@@ -265,6 +265,14 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
             long size;
             var hash = Workspace.Import(sourcePath, out stored, out size);
 
+            // Re-importing the workspace's OWN copy (Update FOM is prefilled with those) must not
+            // replace where the file really came from with "<hash>.fed" - keep the recorded one.
+            if (SamePath(sourcePath, stored))
+            {
+                var known = GetAsset(hash);
+                if (known != null) return known;
+            }
+
             using (var cmd = _cn.CreateCommand())
             {
                 cmd.CommandText =
@@ -287,6 +295,12 @@ CREATE INDEX IF NOT EXISTS ix_field_name ON run_field(name, ok);
                 StoredPath = stored,
                 Size = size,
             };
+        }
+
+        private static bool SamePath(string a, string b)
+        {
+            try { return string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase); }
+            catch (Exception) { return false; }
         }
 
         public AssetRef GetAsset(string hash)

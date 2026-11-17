@@ -8,7 +8,7 @@
         </Grid.RowDefinitions>
 
         <StackPanel Margin="0,0,0,14">
-            <TextBlock Text="CSV template" Style="{StaticResource PageTitle}"/>
+            <TextBlock Text="CSV Template" Style="{StaticResource PageTitle}"/>
             <TextBlock Style="{StaticResource PageLead}" MaxWidth="1000" HorizontalAlignment="Left"
                        Text="Pick an object class or an interaction, tick what the test touches, then download the template. Columns and datatypes come from the FOM — the CSV never states a type, so it cannot drift out of step with the FOM. Upload the result into a test case as a Send or Receive sheet."/>
             <StackPanel Orientation="Horizontal" Margin="0,12,0,0">

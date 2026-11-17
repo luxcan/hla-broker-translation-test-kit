@@ -226,7 +226,8 @@ namespace BrokerTestKit.Gui
             rec.ModuleHashes = string.Join(",", hashes.ToArray());
 
             _store.Rehydrate(rec);
-            rec.OriginalPath = structurePath;
+            // the asset's recorded origin: the picked file, or - for a workspace copy - where it first came from
+            rec.OriginalPath = structure != null && !string.IsNullOrEmpty(structure.OriginalPath) ? structure.OriginalPath : structurePath;
 
             ok = Validate(rec);
             if (!ok) return rec;                      // do not persist something that will not load

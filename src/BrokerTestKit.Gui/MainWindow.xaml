@@ -56,14 +56,16 @@
                 <StackPanel DockPanel.Dock="Bottom">
                     <TextBlock Text="TOOLS" Style="{StaticResource Overline}" Margin="8,0,0,6"/>
                     <ListBox x:Name="ToolsNav" Style="{StaticResource NavList}" Padding="0"
-                             ItemContainerStyle="{StaticResource NavItem}" SelectionChanged="ToolsNavChanged">
-                        <ListBoxItem Content="CSV template" Tag="&#xE8A5;"/>
-                        <ListBoxItem Content="FOM registry" Tag="&#xE8F1;"/>
+                             ItemContainerStyle="{StaticResource NavItem}" SelectionChanged="ToolsNavChanged"
+                             PreviewMouseLeftButtonUp="NavItemClicked">
+                        <ListBoxItem Content="CSV Template" Tag="&#xE8A5;"/>
+                        <ListBoxItem Content="FOM Registry" Tag="&#xE8F1;"/>
                     </ListBox>
                 </StackPanel>
 
                 <ListBox x:Name="MainNav" Style="{StaticResource NavList}" Padding="0" VerticalAlignment="Top"
-                         ItemContainerStyle="{StaticResource NavItem}" SelectionChanged="MainNavChanged">
+                         ItemContainerStyle="{StaticResource NavItem}" SelectionChanged="MainNavChanged"
+                 PreviewMouseLeftButtonUp="NavItemClicked">
                     <ListBoxItem Content="Dashboard" Tag="&#xE80F;"/>
                     <ListBoxItem Content="Pairs" Tag="&#xE8AB;"/>
                 </ListBox>
